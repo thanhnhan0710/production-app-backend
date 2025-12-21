@@ -1,0 +1,30 @@
+# Xóa dòng version: '3.8' đi cũng được cho đỡ cảnh báo
+
+services:
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      # Chú ý: Dùng dấu cách (space), không dùng Tab
+      # DATABASE_URL phải thẳng hàng với SECRET_KEY
+      DATABASE_URL: mysql+pymysql://root:Mysql%402025@db:3306/production_managerment
+      SECRET_KEY: AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-GGGG
+    depends_on:
+      - db
+
+  db:
+    image: mysql:9.5
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: Mysql@2025
+      MYSQL_DATABASE: production_managerment
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+volumes:
+  mysql_data:

@@ -1,0 +1,28 @@
+# 🏭 Production App Backend
+
+Hệ thống Backend quản lý sản xuất (Production Management System), bao gồm quản lý nhân sự, ca làm việc, kho sợi (Yarn), và sản phẩm.
+
+Dự án được xây dựng bằng **Python (FastAPI)** và đóng gói bằng **Docker**, sử dụng **MySQL** làm cơ sở dữ liệu.
+
+---
+
+## 🛠 Công nghệ sử dụng
+
+* **Ngôn ngữ:** Python 3.10+
+* **Framework:** FastAPI
+* **Database:** MySQL 8.0+
+* **ORM:** SQLAlchemy
+* **Migration:** Alembic
+* **Containerization:** Docker & Docker Compose
+
+---
+
+## 🚀 Hướng dẫn cài đặt (Dành cho Dev mới)
+
+Để chạy dự án này, bạn **không cần** cài Python hay MySQL trên máy. Bạn chỉ cần cài **Docker Desktop** và **Git**.
+
+### 1. Tải source code
+```bash
+git clone [https://github.com/thanhnhan0710/production-app-backend.git](https://github.com/thanhnhan0710/production-app-backend.git)
+cd production-app-backend
+
