@@ -10,7 +10,7 @@ services:
     environment:
       # Chú ý: Dùng dấu cách (space), không dùng Tab
       # DATABASE_URL phải thẳng hàng với SECRET_KEY
-      DATABASE_URL: mysql+pymysql://root:Mysql%402025@db:3306/production_managerment
+      DATABASE_URL: mysql+pymysql://root:Mysql%402025@db:3306/production_management
       SECRET_KEY: AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-GGGG
     depends_on:
       - db
@@ -20,7 +20,7 @@ services:
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: Mysql@2025
-      MYSQL_DATABASE: production_managerment
+      MYSQL_DATABASE: production_management
     ports:
       - "3307:3306"
     volumes:

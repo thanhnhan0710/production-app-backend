@@ -6,9 +6,10 @@ from app.db.base import Base
 class YarnLot(Base):
     __tablename__ = "yarn_lots"
 
-    # Composite Primary Key
-    lot_code = Column(String(50), primary_key=True, index=True)
-    yarn_id = Column(Integer, ForeignKey("yarns.yarn_id"), primary_key=True)
+    id = Column(Integer, primary_key=True, index=True)
+   
+    lot_code = Column(String(50), unique=True, index=True)
+    yarn_id = Column(Integer, ForeignKey("yarns.yarn_id"),nullable=False)
 
     # Thông tin nhập
     import_date = Column(Date, nullable=False)

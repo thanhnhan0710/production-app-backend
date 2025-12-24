@@ -22,6 +22,7 @@ COPY . .
 
 # 7. Cấp quyền chạy cho script khởi động (sẽ tạo ở bước 2)
 COPY start.sh /start.sh
+RUN sed -i 's/\r$//' /start.sh
 RUN chmod +x /start.sh
 
 # 8. Mở port 8000

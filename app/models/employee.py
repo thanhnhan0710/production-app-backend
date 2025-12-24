@@ -16,3 +16,4 @@ class Employee(Base):
 
     # Quan hệ n-1: Nhân viên thuộc về một phòng ban
     department = relationship("Department", back_populates="employees")
+    work_schedules = relationship("WorkSchedule", back_populates="employee")

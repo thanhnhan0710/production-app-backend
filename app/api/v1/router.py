@@ -14,6 +14,13 @@ from app.api.v1.endpoints import (
     material_issue_slips,
     material_issue_slip_details,
     units,
+    baskets,
+    dye_colors,
+    standards,
+    work_schedules,
+    weaving_basket_tickets,
+    weaving_inspections,
+    inventory_semis,
 )
 
 api_router = APIRouter()
@@ -32,4 +39,12 @@ api_router.include_router(yarn_issue_slip_details.router, prefix="/yarn-issue-sl
 api_router.include_router(material_issue_slips.router, prefix="/material-issue-slips", tags=["Material Issue Slips"])
 api_router.include_router(material_issue_slip_details.router, prefix="/material-issue-slip-details", tags=["Material Issue Slip Details"])
 api_router.include_router(units.router, prefix="/units", tags=["Units"])
+api_router.include_router(baskets.router, prefix="/baskets", tags=["Baskets"])
+api_router.include_router(dye_colors.router, prefix="/dye-colors", tags=["Dye Colors"])
+api_router.include_router(standards.router, prefix="/standards", tags=["Standards"])
+api_router.include_router(work_schedules.router, prefix="/work-schedules", tags=["Work Schedules"])
+api_router.include_router(weaving_basket_tickets.router, prefix="/weaving-basket-tickets", tags=["Weaving Basket Tickets"])
+api_router.include_router(weaving_inspections.router, prefix="/weaving-inspections", tags=["Weaving Inspections"])
+api_router.include_router(inventory_semis.router, prefix="/inventory-semis", tags=["Inventory Semis"])
+
 
