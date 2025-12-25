@@ -21,6 +21,8 @@ from app.api.v1.endpoints import (
     weaving_basket_tickets,
     weaving_inspections,
     inventory_semis,
+    login,
+    users,
 )
 
 api_router = APIRouter()
@@ -46,5 +48,7 @@ api_router.include_router(work_schedules.router, prefix="/work-schedules", tags=
 api_router.include_router(weaving_basket_tickets.router, prefix="/weaving-basket-tickets", tags=["Weaving Basket Tickets"])
 api_router.include_router(weaving_inspections.router, prefix="/weaving-inspections", tags=["Weaving Inspections"])
 api_router.include_router(inventory_semis.router, prefix="/inventory-semis", tags=["Inventory Semis"])
+api_router.include_router(login.router, tags=["login"], prefix="/login")
+api_router.include_router(users.router, prefix="/users", tags=["Users"])
 
 

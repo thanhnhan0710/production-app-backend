@@ -11,3 +11,4 @@ class Department(Base):
 
     # Quan hệ 1-n: Một phòng ban có nhiều nhân viên
     employees = relationship("Employee", back_populates="department")
+    users = relationship("User", back_populates="department")

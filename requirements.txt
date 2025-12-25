@@ -8,3 +8,6 @@ python-dotenv
 email-validator
 alembic
 cryptography
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart

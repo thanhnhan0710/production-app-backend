@@ -36,6 +36,8 @@ from app.models.weaving_basket_ticket import WeavingBasketTicket
 from app.models.weaving_inspection import WeavingInspection
 from app.models.standard import Standard
 from app.models.dye_color import DyeColor
+from app.models.user import User
+from app.models.log import Log
 from app.models.inventory_semi import SemiFinishedImportTicket, SemiFinishedImportDetail, SemiFinishedExportTicket, SemiFinishedExportDetail
 
 

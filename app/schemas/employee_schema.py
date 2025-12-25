@@ -9,6 +9,7 @@ class EmployeeBase(BaseModel):
     position: str
     department_id: int
     note:Optional[str] = None
+    avatar_url: Optional[str] = None
 
 class EmployeeCreate(EmployeeBase):
     pass
@@ -21,6 +22,7 @@ class EmployeeUpdate(BaseModel):
     position: Optional[str] = None
     department_id: Optional[int] = None
     note:Optional[str] = None
+    avatar_url: Optional[str] = None
 
 class EmployeeResponse(EmployeeBase):
     employee_id: int

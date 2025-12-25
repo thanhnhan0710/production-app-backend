@@ -10,21 +10,33 @@ services:
     environment:
       # Chú ý: Dùng dấu cách (space), không dùng Tab
       # DATABASE_URL phải thẳng hàng với SECRET_KEY
+      # Password là Mysql@2025 (đã mã hóa @ thành %40)
       DATABASE_URL: mysql+pymysql://root:Mysql%402025@db:3306/production_management
       SECRET_KEY: AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-GGGG
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    restart: on-failure
 
   db:
-    image: mysql:9.5
+    image: mysql:8.0   # Khuyên dùng 8.0 hoặc 8.4 (LTS) vì 9.5 có thể chưa ổn định với driver cũ
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: Mysql@2025
       MYSQL_DATABASE: production_management
     ports:
-      - "3307:3306"
+      - "3308:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+    
+    # --- PHẦN QUAN TRỌNG VỪA THÊM VÀO ---
+    healthcheck:
+      # Lưu ý: -pMysql@2025 (viết liền sau chữ -p, không có dấu cách)
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pMysql@2025"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
 volumes:
   mysql_data:
