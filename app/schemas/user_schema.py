@@ -9,7 +9,6 @@ class UserBase(BaseModel):
     is_active: Optional[bool] = True
     is_superuser: bool = False
     role: str = "staff"
-    department_id: Optional[int] = None
 
 # 2. Create Schema: Dùng khi tạo User mới (Bắt buộc có Password)
 class UserCreate(UserBase):
@@ -23,7 +22,6 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
     is_active: Optional[bool] = None
     role: Optional[str] = None
-    department_id: Optional[int] = None
 
 # 4. Response Schema: Dùng để trả về dữ liệu (Ẩn Password)
 class UserResponse(UserBase):
@@ -37,8 +35,3 @@ class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
-# Import DepartmentResponse từ file schema của bạn
-from app.schemas.department_schema import DepartmentResponse 
-
-class UserWithDepartment(UserResponse):
-    department: Optional[DepartmentResponse] = None

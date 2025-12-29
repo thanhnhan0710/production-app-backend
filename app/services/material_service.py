@@ -64,11 +64,10 @@ def search_materials(
     else:
         query = query.filter(
             or_(
-                Material.material_code.ilike(f"%{keyword}%"),
+                Material.material_id.ilike(f"%{keyword}%"),
                 Material.material_name.ilike(f"%{keyword}%"),
                 Material.lot_code.ilike(f"%{keyword}%"),
-                Material.warehouse_location.ilike(f"%{keyword}%"),
-                Material.container_code.ilike(f"%{keyword}%"),
+                Material.imported_by.ilike(f"%{keyword}%"),
                 Material.note.ilike(f"%{keyword}%")
             )
         )

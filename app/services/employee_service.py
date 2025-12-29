@@ -47,8 +47,6 @@ def delete_employee(db: Session, emp_id: int):
     db.commit()
     return True
 
-
-
 def search_employees(
     db: Session,
     keyword: str,
@@ -57,7 +55,7 @@ def search_employees(
 ):
     query = db.query(Employee)
 
-    # Nếu keyword là số → tìm theo ID / phone
+    # Nếu keyword là số -> tìm theo ID / phone
     if keyword.isdigit():
         query = query.filter(
             or_(
@@ -77,6 +75,21 @@ def search_employees(
 
     return (
         query
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+# [MỚI] Hàm lấy nhân viên theo mã bộ phận
+def get_employees_by_department(
+    db: Session, 
+    department_id: int, 
+    skip: int = 0, 
+    limit: int = 100
+):
+    return (
+        db.query(Employee)
+        .filter(Employee.department_id == department_id)
         .offset(skip)
         .limit(limit)
         .all()

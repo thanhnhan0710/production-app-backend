@@ -16,12 +16,23 @@ def read_yarns(skip: int = 0, limit: int = 100, db: Session = Depends(deps.get_d
 def create_yarn(yarn: YarnCreate, db: Session = Depends(deps.get_db)):
     return yarn_service.create_yarn(db, yarn)
 
+# [MỚI] Endpoint tìm kiếm sợi
+# Gọi: GET /api/v1/yarns/search?keyword=...
+@router.get("/search", response_model=List[YarnResponse])
+def search_yarns(
+    keyword: str,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(deps.get_db)
+):
+    return yarn_service.search_yarns(db, keyword, skip, limit)
+
 @router.put("/{yarn_id}", response_model=YarnResponse)
 def update_yarn(yarn_id: int, yarn: YarnUpdate, db: Session = Depends(deps.get_db)):
-    updated_emp = yarn_service.update_yarn(db, yarn_id, yarn)
-    if not updated_emp:
+    updated_yarn = yarn_service.update_yarn(db, yarn_id, yarn)
+    if not updated_yarn:
         raise HTTPException(status_code=404, detail="Yarn not found")
-    return updated_emp
+    return updated_yarn
 
 @router.delete("/{yarn_id}")
 def delete_yarn(yarn_id: int, db: Session = Depends(deps.get_db)):

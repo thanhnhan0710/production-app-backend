@@ -18,7 +18,6 @@ def read_users(
     keyword: Optional[str] = Query(None),
     role: Optional[str] = None,
     is_active: Optional[bool] = None,
-    department_id: Optional[int] = None,
     current_user: User = Depends(deps.get_current_active_user), # Yêu cầu phải login
 ) -> Any:
     """
@@ -31,7 +30,6 @@ def read_users(
         keyword=keyword, 
         role=role, 
         is_active=is_active,
-        department_id=department_id
     )
     return {"data": users, "total": total, "skip": skip, "limit": limit}
 
@@ -86,10 +84,10 @@ def update_user(
     # 3. GHI LOG
     log_service.create_log(
         db=db,
-        user_id=current_user.id, # Người thực hiện sửa
+        user_id=current_user.user_id, # Người thực hiện sửa
         action="UPDATE",
         target_type="User",
-        target_id=updated_user.id,
+        target_id=updated_user.user_id,
         description=f"Admin {current_user.email} đã cập nhật user {updated_user.email}",
         changes={
             "before": old_data,
@@ -114,7 +112,7 @@ def delete_user(
         raise HTTPException(status_code=404, detail="User not found")
     
     # Không cho phép tự xóa chính mình
-    if user.id == current_user.id:
+    if user.id == current_user.user_id:
          raise HTTPException(status_code=400, detail="Không thể xóa tài khoản đang đăng nhập")
 
     user = user_service.soft_delete_user(db, user_id=user_id)

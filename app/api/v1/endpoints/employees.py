@@ -16,6 +16,16 @@ def read_employees(skip: int = 0, limit: int = 100, db: Session = Depends(deps.g
 def create_employee(emp: EmployeeCreate, db: Session = Depends(deps.get_db)):
     return employee_service.create_employee(db, emp)
 
+# [MỚI] Endpoint tìm theo mã bộ phận
+@router.get("/department/{department_id}", response_model=List[EmployeeResponse])
+def read_employees_by_department(
+    department_id: int,
+    skip: int = 0, 
+    limit: int = 100, 
+    db: Session = Depends(deps.get_db)
+):
+    return employee_service.get_employees_by_department(db, department_id, skip, limit)
+
 @router.put("/{emp_id}", response_model=EmployeeResponse)
 def update_employee(emp_id: int, emp: EmployeeUpdate, db: Session = Depends(deps.get_db)):
     updated_emp = employee_service.update_employee(db, emp_id, emp)

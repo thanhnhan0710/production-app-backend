@@ -20,10 +20,5 @@ class User(Base):
     is_superuser = Column(Boolean, default=False)  # Admin hệ thống
     role = Column(String(50), default="staff")     # Ví dụ: admin, manager, staff, worker
     
-    # Liên kết Phòng ban (Optional: Nếu User thuộc về 1 phòng ban)
-    department_id = Column(Integer, ForeignKey("departments.department_id"), nullable=True)
-    
     # Relationships
-    # Lưu ý: Phải khai báo back_populates bên model Department
-    department = relationship("Department", back_populates="users")
     logs = relationship("Log", back_populates="user")

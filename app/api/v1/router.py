@@ -23,6 +23,7 @@ from app.api.v1.endpoints import (
     inventory_semis,
     login,
     users,
+    upload,
 )
 
 api_router = APIRouter()
@@ -50,5 +51,6 @@ api_router.include_router(weaving_inspections.router, prefix="/weaving-inspectio
 api_router.include_router(inventory_semis.router, prefix="/inventory-semis", tags=["Inventory Semis"])
 api_router.include_router(login.router, tags=["login"], prefix="/login")
 api_router.include_router(users.router, prefix="/users", tags=["Users"])
+api_router.include_router(upload.router, prefix="/upload", tags=["Upload"])
 
 

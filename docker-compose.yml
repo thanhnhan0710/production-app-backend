@@ -19,7 +19,7 @@ services:
     restart: on-failure
 
   db:
-    image: mysql:8.0   # Khuyên dùng 8.0 hoặc 8.4 (LTS) vì 9.5 có thể chưa ổn định với driver cũ
+    image: mysql:9.5   # Khuyên dùng 8.0 hoặc 8.4 (LTS) vì 9.5 có thể chưa ổn định với driver cũ
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: Mysql@2025

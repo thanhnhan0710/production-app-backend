@@ -10,7 +10,7 @@ class UserService:
     
     # --- BASIC CRUD ---
     def get_by_id(self, db: Session, user_id: int) -> Optional[User]:
-        return db.query(User).filter(User.id == user_id).first()
+        return db.query(User).filter(User.user_id == user_id).first()
 
     def get_by_email(self, db: Session, email: str) -> Optional[User]:
         return db.query(User).filter(User.email == email).first()
@@ -25,7 +25,6 @@ class UserService:
         keyword: Optional[str] = None,
         role: Optional[str] = None,
         is_active: Optional[bool] = None,
-        department_id: Optional[int] = None
     ) -> Tuple[List[User], int]:
         """
         Tìm kiếm nâng cao:
@@ -54,9 +53,6 @@ class UserService:
         if is_active is not None:
             query = query.filter(User.is_active == is_active)
 
-        # 4. Lọc theo Phòng ban
-        if department_id:
-            query = query.filter(User.department_id == department_id)
 
         # Tính tổng số bản ghi trước khi phân trang (để FE làm phân trang)
         total = query.count()
@@ -76,7 +72,6 @@ class UserService:
             full_name=user.full_name,
             phone_number=user.phone_number,
             role=user.role,
-            department_id=user.department_id,
             is_active=user.is_active,
             is_superuser=user.is_superuser
         )

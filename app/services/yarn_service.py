@@ -32,6 +32,7 @@ def search_yarns(
             or_(
                 Yarn.yarn_id.ilike(f"%{keyword}%"),
                 Yarn.yarn_name.ilike(f"%{keyword}%"),
+                Yarn.item_code.ilike(f"%{keyword}%"),
                 Yarn.note.ilike(f"%{keyword}%")
             )
         )
