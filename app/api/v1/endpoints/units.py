@@ -57,18 +57,9 @@ def delete_unit(
 
 @router.get("/search", response_model=List[UnitResponse])
 def search_units(
-    unit_id: Optional[int] = None,
-    unit_name: Optional[str] = None,
-    note: Optional[str] = None,
+    keyword: str,
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(deps.get_db)
 ):
-    return unit_service.search_units(
-        db=db,
-        unit_id=unit_id,
-        unit_name=unit_name,
-        note=note,
-        skip=skip,
-        limit=limit
-    )
+    return unit_service.search_units(db, keyword, skip, limit)

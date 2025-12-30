@@ -19,6 +19,14 @@ def read_materials(
     db: Session = Depends(deps.get_db)
 ):
     return material_service.get_materials(db, skip=skip, limit=limit)
+@router.get("/search", response_model=List[MaterialResponse])
+def search_materials(
+    keyword: str,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(deps.get_db)
+):
+    return material_service.search_materials(db, keyword, skip, limit)
 
 @router.get("/{material_id}", response_model=MaterialResponse)
 def read_material(
@@ -60,11 +68,4 @@ def delete_material(
         raise HTTPException(status_code=404, detail="Material not found")
     return {"message": "Deleted successfully"}
 
-@router.get("/search", response_model=List[MaterialResponse])
-def search_materials(
-    keyword: str,
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(deps.get_db)
-):
-    return material_service.search_materials(db, keyword, skip, limit)
+

@@ -47,7 +47,6 @@ def delete_material(db: Session, material_id: int):
     return True
 
 
-
 def search_materials(
     db: Session,
     keyword: str,
@@ -64,11 +63,8 @@ def search_materials(
     else:
         query = query.filter(
             or_(
-                Material.material_id.ilike(f"%{keyword}%"),
                 Material.material_name.ilike(f"%{keyword}%"),
                 Material.lot_code.ilike(f"%{keyword}%"),
-                Material.imported_by.ilike(f"%{keyword}%"),
-                Material.note.ilike(f"%{keyword}%")
             )
         )
 

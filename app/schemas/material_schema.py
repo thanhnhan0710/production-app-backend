@@ -9,6 +9,7 @@ class MaterialBase(BaseModel):
     quantity: int
     unit_id: int
     imported_by: int
+    note:Optional[str] = None
 
 class MaterialCreate(MaterialBase):
     pass
@@ -20,6 +21,7 @@ class MaterialUpdate(BaseModel):
     quantity: Optional[int] = None
     unit_id: Optional[int] = None
     imported_by: Optional[int] = None
+    note:Optional[str] = None
 
 class MaterialResponse(MaterialBase):
     material_id: int
