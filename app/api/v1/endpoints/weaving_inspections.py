@@ -13,6 +13,7 @@ from app.services import weaving_inspection_service
 router = APIRouter()
 
 # =========================
+
 # GET LIST (All or Filter by Ticket)
 # =========================
 @router.get("/", response_model=List[WeavingInspectionResponse])

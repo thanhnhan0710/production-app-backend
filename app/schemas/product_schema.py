@@ -5,6 +5,7 @@ from typing import Optional, List
 class ProductBase(BaseModel):
     item_code: str
     note: Optional[str] = None
+    image_url: Optional[str] = None
 
 class ProductCreate(ProductBase):
     pass
@@ -12,6 +13,7 @@ class ProductCreate(ProductBase):
 class ProductUpdate(BaseModel):
     item_code: Optional[str] = None
     note: Optional[str] = None
+    image_url: Optional[str] = None
 
 class ProductResponse(ProductBase):
     product_id: int

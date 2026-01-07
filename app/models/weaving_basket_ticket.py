@@ -14,7 +14,7 @@ class WeavingBasketTicket(Base):
     product_id = Column(Integer, ForeignKey("products.product_id"), nullable=False)
     standard_id = Column(Integer, ForeignKey("standards.standard_id"), nullable=False)
     machine_id = Column(Integer, ForeignKey("machines.machine_id"), nullable=False)
-    machine_line = Column(String(50), nullable=True)
+    machine_line = Column(Integer, nullable=True)
     
     # --- Thông tin sợi & Rổ ---
     yarn_load_date = Column(Date, nullable=False)        # Ngày lên sợi

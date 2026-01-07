@@ -8,4 +8,6 @@ class Product(Base):
     product_id = Column(Integer, primary_key=True, index=True)
     item_code = Column(String(100), unique=True, nullable=False)
     note = Column(String(255), nullable=True)
+    image_url = Column(String(255), nullable=True)
+
     standards = relationship("Standard", back_populates="product")

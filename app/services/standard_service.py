@@ -1,10 +1,11 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc, or_
 from fastapi import HTTPException
 from typing import Optional, List
 
-# Import Model & Schema
-from app.models.standard import Standard # Nhớ sửa đường dẫn đúng file model
+from app.models.standard import Standard
+from app.models.product import Product
+from app.models.dye_color import DyeColor
 from app.schemas.standard_schema import StandardCreate, StandardUpdate
 
 # ============================
@@ -12,17 +13,17 @@ from app.schemas.standard_schema import StandardCreate, StandardUpdate
 # ============================
 
 def get_standard_by_id(db: Session, standard_id: int):
-    """Get standard details by ID"""
-    return db.query(Standard).filter(Standard.standard_id == standard_id).first()
-
-def get_standard_by_code(db: Session, code: str):
-    """Get standard by Code (Used for duplicate check)"""
-    return db.query(Standard).filter(Standard.code == code).first()
-
-def get_standards(db: Session, skip: int = 0, limit: int = 100):
-    """Get list of standards (Sorted by ID desc)"""
     return (
         db.query(Standard)
+        .options(joinedload(Standard.product), joinedload(Standard.dye_color)) # Load quan hệ
+        .filter(Standard.standard_id == standard_id)
+        .first()
+    )
+
+def get_standards(db: Session, skip: int = 0, limit: int = 100):
+    return (
+        db.query(Standard)
+        .options(joinedload(Standard.product), joinedload(Standard.dye_color)) # Load quan hệ
         .order_by(desc(Standard.standard_id))
         .offset(skip)
         .limit(limit)
@@ -35,23 +36,24 @@ def get_standards(db: Session, skip: int = 0, limit: int = 100):
 
 def search_standards(
     db: Session,
-    keyword: Optional[str] = None, # Search by Code or Note
+    keyword: Optional[str] = None, 
     product_id: Optional[int] = None,
     dye_color_id: Optional[int] = None,
     skip: int = 0,
     limit: int = 100
 ):
-    """
-    Advanced search for standards
-    """
-    query = db.query(Standard)
+    query = db.query(Standard).options(joinedload(Standard.product), joinedload(Standard.dye_color))
 
     if keyword:
         search_term = f"%{keyword}%"
-        query = query.filter(
+        # Tìm trong Note, Appearance hoặc Mã sản phẩm, Tên màu
+        query = query.join(Product, isouter=True).join(DyeColor, isouter=True).filter(
             or_(
-                Standard.code.ilike(search_term),
-                Standard.note.ilike(search_term)
+                Standard.note.ilike(search_term),
+                Standard.appearance.ilike(search_term),
+                # [FIX] Sửa Product.name -> Product.item_code
+                Product.item_code.ilike(search_term), 
+                DyeColor.color_name.ilike(search_term) 
             )
         )
     
@@ -68,68 +70,54 @@ def search_standards(
 # ============================
 
 def create_standard(db: Session, standard_in: StandardCreate):
-    # 1. Check if Standard Code already exists
-    existing_std = get_standard_by_code(db, standard_in.code)
-    if existing_std:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Standard code '{standard_in.code}' already exists."
-        )
-
-    # 2. (Optional) Check if product_id exists
-    # Bạn có thể thêm check Product tồn tại ở đây nếu muốn báo lỗi rõ ràng hơn
-    # so với lỗi ForeignKey của Database.
-
-    # 3. Create object
-    db_standard = Standard(**standard_in.model_dump())
-    
-    # 4. Save
-    db.add(db_standard)
-    db.commit()
-    db.refresh(db_standard)
-    
-    return db_standard
+    try:
+        db_standard = Standard(**standard_in.model_dump())
+        
+        db.add(db_standard)
+        db.commit()
+        db.refresh(db_standard)
+        
+        return db_standard
+    except Exception as e:
+        db.rollback()
+        print(f"Error creating standard: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 # ============================
 # UPDATE
 # ============================
 
 def update_standard(db: Session, standard_id: int, standard_in: StandardUpdate):
-    # 1. Find the standard
     db_standard = get_standard_by_id(db, standard_id)
     if not db_standard:
-        raise HTTPException(status_code=404, detail="Standard not found")
+        return None
 
-    # 2. Check unique code if changed
-    if standard_in.code and standard_in.code != db_standard.code:
-        existing_code = get_standard_by_code(db, standard_in.code)
-        if existing_code:
-            raise HTTPException(
-                status_code=409, 
-                detail=f"Standard code '{standard_in.code}' already exists."
-            )
-
-    # 3. Update fields
     update_data = standard_in.model_dump(exclude_unset=True)
 
     for field, value in update_data.items():
         setattr(db_standard, field, value)
 
-    db.commit()
-    db.refresh(db_standard)
-    return db_standard
+    try:
+        db.commit()
+        db.refresh(db_standard)
+        return db_standard
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database update error: {str(e)}")
 
 # ============================
 # DELETE
 # ============================
 
 def delete_standard(db: Session, standard_id: int):
-    # 1. Find
     db_standard = get_standard_by_id(db, standard_id)
     if not db_standard:
-        raise HTTPException(status_code=404, detail="Standard not found")
+        return False
 
-    # 2. Delete
-    db.delete(db_standard)
-    db.commit()
-    return {"message": "Standard deleted successfully"}
+    try:
+        db.delete(db_standard)
+        db.commit()
+        return True
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")

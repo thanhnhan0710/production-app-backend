@@ -8,11 +8,9 @@ class Standard(Base):
     __tablename__ = "standards"
 
     standard_id = Column(Integer, primary_key=True, index=True)
-    code = Column(String(50), unique=True, index=True, nullable=False) 
-
     # Khóa ngoại
     product_id = Column(Integer, ForeignKey("products.product_id"), nullable=False) 
-    dye_color_id = Column(Integer, ForeignKey("dye_colors.color_id"), nullable=True) 
+    dye_color_id = Column(Integer, ForeignKey("dye_colors.color_id"), nullable=True)
 
     # Thông số vật lý
     width_mm = Column(String (50), nullable=False)                           

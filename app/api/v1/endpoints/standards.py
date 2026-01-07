@@ -28,7 +28,7 @@ def read_standards(
 
 
 # =========================
-# SEARCH
+# SEARCH (QUAN TRỌNG: Đặt trên GET ID)
 # =========================
 @router.get("/search", response_model=List[StandardResponse])
 def search_standards(
@@ -40,7 +40,8 @@ def search_standards(
     db: Session = Depends(deps.get_db)
 ):
     """
-    Search standards by Code, Note, Product ID or Dye Color ID.
+    Search standards by Keyword (Note, Appearance, Product Item Code, Color Name) 
+    or Filters (Product ID, Dye Color ID).
     """
     return standard_service.search_standards(
         db=db,
@@ -78,7 +79,7 @@ def create_standard(
     db: Session = Depends(deps.get_db)
 ):
     """
-    Create a new standard. Checks for duplicate Code.
+    Create a new standard.
     """
     return standard_service.create_standard(db, standard_in)
 
@@ -93,9 +94,9 @@ def update_standard(
     db: Session = Depends(deps.get_db)
 ):
     """
-    Update standard info. Checks for duplicate Code if changed.
+    Update standard info.
     """
-    # Service raises HTTPException 404 or 409 internally
+    # Service raises HTTPException 404 or 500 internally
     return standard_service.update_standard(db, standard_id, standard_in)
 
 
