@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, ForeignKey,String
 from sqlalchemy.orm import relationship
-from app.db.base import Base
+from app.db.base_class import Base
 
 class YarnIssueSlipDetail(Base):
     __tablename__ = "yarn_issue_slip_details"

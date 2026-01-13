@@ -1,5 +1,5 @@
-from sqlalchemy.orm import Session
-from sqlalchemy import or_  # Cần import thêm or_ để tìm kiếm Tên HOẶC Email
+from sqlalchemy.orm import Session, joinedload # [MỚI] Import joinedload
+from sqlalchemy import or_
 from typing import Optional, List, Tuple
 
 from app.models.user import User
@@ -10,10 +10,11 @@ class UserService:
     
     # --- BASIC CRUD ---
     def get_by_id(self, db: Session, user_id: int) -> Optional[User]:
-        return db.query(User).filter(User.user_id == user_id).first()
+        # [SỬA] Thêm options(joinedload(User.employee)) để lấy luôn thông tin nhân viên
+        return db.query(User).options(joinedload(User.employee)).filter(User.user_id == user_id).first()
 
     def get_by_email(self, db: Session, email: str) -> Optional[User]:
-        return db.query(User).filter(User.email == email).first()
+        return db.query(User).options(joinedload(User.employee)).filter(User.email == email).first()
 
     # --- ADVANCED SEARCH & FILTER ---
     def get_users(
@@ -29,15 +30,17 @@ class UserService:
         """
         Tìm kiếm nâng cao:
         - keyword: Tìm trong Tên hoặc Email
-        - filters: role, is_active, department_id
+        - filters: role, is_active
         - return: (danh sách user, tổng số lượng bản ghi tìm thấy)
         """
-        query = db.query(User)
+        
+        # [SỬA QUAN TRỌNG] Thêm joinedload để lấy quan hệ employee
+        # Nếu không có dòng này, Pydantic schema sẽ không lấy được data 'employee' để trả về FE
+        query = db.query(User).options(joinedload(User.employee))
 
         # 1. Lọc theo từ khóa (Tìm kiếm mờ - LIKE)
         if keyword:
             search_format = f"%{keyword}%"
-            # Tìm xem keyword có nằm trong full_name HOẶC email không
             query = query.filter(
                 or_(
                     User.full_name.ilike(search_format),
@@ -53,8 +56,7 @@ class UserService:
         if is_active is not None:
             query = query.filter(User.is_active == is_active)
 
-
-        # Tính tổng số bản ghi trước khi phân trang (để FE làm phân trang)
+        # Tính tổng số bản ghi
         total = query.count()
 
         # Áp dụng phân trang
@@ -73,7 +75,8 @@ class UserService:
             phone_number=user.phone_number,
             role=user.role,
             is_active=user.is_active,
-            is_superuser=user.is_superuser
+            is_superuser=user.is_superuser,
+            employee_id=user.employee_id  # [MỚI] Map thêm trường employee_id
         )
         
         db.add(db_user)
@@ -89,6 +92,8 @@ class UserService:
             del update_data["password"]
             update_data["hashed_password"] = hashed_password
 
+        # Hàm này tự động map tất cả key trong update_data vào db_user
+        # Vì employee_id có trong schema UserUpdate, nó sẽ tự động được cập nhật ở đây
         for key, value in update_data.items():
             setattr(db_user, key, value)
 
@@ -98,13 +103,8 @@ class UserService:
         return db_user
 
     # --- DELETE METHODS ---
-    
+    # (Giữ nguyên như cũ)
     def soft_delete_user(self, db: Session, user_id: int) -> Optional[User]:
-        """
-        Xóa mềm: Chỉ set is_active = False.
-        Dữ liệu vẫn còn trong DB để tra cứu lịch sử.
-        Khuyên dùng cách này.
-        """
         user = self.get_by_id(db, user_id)
         if user:
             user.is_active = False
@@ -114,11 +114,6 @@ class UserService:
         return user
 
     def delete_user(self, db: Session, user_id: int) -> Optional[User]:
-        """
-        Xóa cứng: Bay màu khỏi Database vĩnh viễn.
-        Cẩn thận: Có thể lỗi nếu User này đang dính khóa ngoại (Foreign Key)
-        với các bảng khác (ví dụ bảng Orders, Logs).
-        """
         user = self.get_by_id(db, user_id)
         if user:
             db.delete(user)

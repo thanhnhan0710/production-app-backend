@@ -7,7 +7,6 @@ class MachineBase(BaseModel):
     total_lines: Optional[int] = None
     purpose: Optional[str] = None
     status: str
-    supplier_id: Optional[int] = None
 
 class MachineCreate(MachineBase):
     pass
@@ -17,7 +16,6 @@ class MachineUpdate(BaseModel):
     total_lines: Optional[int] = None
     purpose: Optional[str] = None
     status: Optional[str] = None
-    supplier_id: Optional[int] = None
     
 class MachineResponse(MachineBase):
     machine_id: int

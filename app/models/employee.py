@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
-from app.db.base import Base # Hoặc app.db.base_class tùy project của bạn
+from app.db.base_class import Base # Hoặc app.db.base_class tùy project của bạn
 
 class Employee(Base):
     __tablename__ = "employees"

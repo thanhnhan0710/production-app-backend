@@ -2,7 +2,7 @@ import enum
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Enum
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from app.db.base import Base
+from app.db.base_class import Base
 
 # --- ENUMS (Định nghĩa các lựa chọn cố định) ---
 

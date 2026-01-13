@@ -24,17 +24,19 @@ def get_suppliers(db: Session, skip: int = 0, limit: int = 100):
 # =========================
 def create_supplier(db: Session, supplier: SupplierCreate):
     try:
+        # model_dump() là phương thức của Pydantic v2
         db_sup = Supplier(**supplier.model_dump())
         db.add(db_sup)
         db.commit()
         db.refresh(db_sup)
         return db_sup
 
-    except IntegrityError:
+    except IntegrityError as e:
         db.rollback()
+        # Log lỗi thực tế ra console để debug nếu cần: print(e)
         raise HTTPException(
             status_code=409,
-            detail="Supplier with this email already exists."
+            detail="Could not create supplier. Possible duplicate data or constraint violation."
         )
 
 
@@ -46,14 +48,22 @@ def update_supplier(db: Session, sup_id: int, sup_data: SupplierUpdate):
     if not db_sup:
         return None
 
+    # exclude_unset=True: Chỉ lấy những trường user thực sự gửi lên
     update_data = sup_data.model_dump(exclude_unset=True)
 
     for key, value in update_data.items():
         setattr(db_sup, key, value)
 
-    db.commit()
-    db.refresh(db_sup)
-    return db_sup
+    try:
+        db.commit()
+        db.refresh(db_sup)
+        return db_sup
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Update failed due to data integrity violation."
+        )
 
 
 # =========================
@@ -67,8 +77,6 @@ def delete_supplier(db: Session, sup_id: int):
     db.delete(db_sup)
     db.commit()
     return True
-
-
 
 
 # =========================
@@ -88,15 +96,16 @@ def search_suppliers(
             Supplier.supplier_id == int(keyword)
         )
     else:
-        query = query.filter(
-            or_(
-                Supplier.supplier_name.ilike(f"%{keyword}%"),
-                Supplier.email.ilike(f"%{keyword}%"),
-                Supplier.phone.ilike(f"%{keyword}%"),
-                Supplier.address.ilike(f"%{keyword}%"),
-                Supplier.note.ilike(f"%{keyword}%")
-            )
+        # Tìm kiếm Text trong các trường quan trọng mới
+        search_filter = or_(
+            Supplier.supplier_name.ilike(f"%{keyword}%"),
+            Supplier.short_name.ilike(f"%{keyword}%"),    # Tên viết tắt
+            Supplier.contact_person.ilike(f"%{keyword}%"), # Người liên hệ
+            Supplier.email.ilike(f"%{keyword}%"),
+            Supplier.tax_code.ilike(f"%{keyword}%"),      # Mã số thuế
+            Supplier.address.ilike(f"%{keyword}%")
         )
+        query = query.filter(search_filter)
 
     return (
         query

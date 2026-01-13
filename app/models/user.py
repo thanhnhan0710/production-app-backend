@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
-from app.db.base import Base
+from app.db.base_class import Base
+from app.models.log import Log
 
 class User(Base):
     __tablename__ = "users"
@@ -16,9 +17,12 @@ class User(Base):
     phone_number = Column(String(20), nullable=True)
     
     # Trạng thái & Phân quyền
+    
     is_active = Column(Boolean, default=True)      # Cho phép đăng nhập hay không
     is_superuser = Column(Boolean, default=False)  # Admin hệ thống
     role = Column(String(50), default="staff")     # Ví dụ: admin, manager, staff, worker
+    employee_id = Column(Integer, ForeignKey("employees.employee_id"), nullable=True)
     
     # Relationships
     logs = relationship("Log", back_populates="user")
+    employee = relationship("Employee")

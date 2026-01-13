@@ -12,7 +12,7 @@ sys.path.append(os.getcwd())
 
 # 2. Import Settings và Base Model từ ứng dụng của bạn
 from app.core.config import settings
-from app.db.base import Base
+from app.db.base_class import Base
 
 # [QUAN TRỌNG] Import tất cả các Models để Alembic nhận diện được bảng
 # Nếu không import ở đây, Alembic sẽ tưởng là chưa có bảng nào và xóa sạch DB cũ
