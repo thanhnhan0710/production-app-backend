@@ -24,6 +24,7 @@ from app.api.v1.endpoints import (
     login,
     users,
     upload,
+    weaving_daily_productions,
 )
 
 api_router = APIRouter()
@@ -52,5 +53,6 @@ api_router.include_router(inventory_semis.router, prefix="/inventory-semis", tag
 api_router.include_router(login.router, tags=["login"], prefix="/login")
 api_router.include_router(users.router, prefix="/users", tags=["Users"])
 api_router.include_router(upload.router, prefix="/upload", tags=["Upload"])
+api_router.include_router(weaving_daily_productions.router, prefix="/weaving-daily-productions", tags=["Weaving Daily Productions"])
 
 

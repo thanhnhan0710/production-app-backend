@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
-from app.models.machine import Machine
+from app.models.machine import Machine, MachineStatus, MachineArea
 from app.schemas.machine_schema import MachineCreate, MachineUpdate
 
 
@@ -28,28 +28,35 @@ def get_machine(db: Session, machine_id: int):
 
 
 # =========================
-# SEARCH (MÃ / TÊN / TRẠNG THÁI)
+# SEARCH (TÊN / MỤC ĐÍCH / TRẠNG THÁI / KHU VỰC)
 # =========================
 def search_machines(
     db: Session,
     keyword: str | None = None,
-    status: str | None = None,
+    status: MachineStatus | None = None, # Dùng Enum type hint
+    area: MachineArea | None = None,     # Thêm bộ lọc khu vực
     skip: int = 0,
     limit: int = 100
 ):
     query = db.query(Machine)
 
+    # 1. Lọc theo từ khóa (Tên máy hoặc Mục đích sử dụng)
     if keyword:
+        keyword_filter = f"%{keyword}%"
         query = query.filter(
             or_(
-                Machine.machine_id.ilike(f"%{keyword}%")
-                if hasattr(Machine.machine_id, "ilike") else False,
-                Machine.machine_name.ilike(f"%{keyword}%")
+                Machine.machine_name.ilike(keyword_filter),
+                Machine.purpose.ilike(keyword_filter)
             )
         )
 
+    # 2. Lọc theo trạng thái (nếu có)
     if status:
         query = query.filter(Machine.status == status)
+
+    # 3. Lọc theo khu vực (nếu có)
+    if area:
+        query = query.filter(Machine.area == area)
 
     return (
         query
@@ -63,6 +70,7 @@ def search_machines(
 # CREATE
 # =========================
 def create_machine(db: Session, data: MachineCreate):
+    # data.model_dump() sẽ tự động convert Enum thành value string tương ứng nếu cần
     machine = Machine(**data.model_dump())
     db.add(machine)
     db.commit()
@@ -82,6 +90,7 @@ def update_machine(
     if not machine:
         return None
 
+    # exclude_unset=True: Chỉ lấy những trường người dùng gửi lên
     update_data = data.model_dump(exclude_unset=True)
 
     for k, v in update_data.items():

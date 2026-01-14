@@ -39,6 +39,7 @@ from app.models.dye_color import DyeColor
 from app.models.user import User
 from app.models.log import Log
 from app.models.inventory_semi import SemiFinishedImportTicket, SemiFinishedImportDetail, SemiFinishedExportTicket, SemiFinishedExportDetail
+from app.models.weaving_daily_production import WeavingDailyProduction
 
 
 

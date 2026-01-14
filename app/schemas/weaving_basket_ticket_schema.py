@@ -44,6 +44,11 @@ class WeavingBasketTicketBase(BaseModel):
     yarn_lot_id: Optional[int] = None
     basket_id: int
 
+    gross_weight: Optional[float] = 0.0
+    net_weight: Optional[float] = 0.0
+    length_meters: Optional[float] = 0.0
+    number_of_knots: Optional[int] = 0
+
 # =======================
 # CREATE (Lúc bắt đầu vào rổ)
 # =======================
