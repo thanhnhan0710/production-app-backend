@@ -12,13 +12,21 @@ class SupplierBase(BaseModel):
     # Thay Literal bằng Enum để đồng bộ với Database và hiển thị Dropdown trên Swagger
     origin_type: Optional[SupplierOriginType] = None
     
+<<<<<<< HEAD
     country: Optional[str] = Field(None, max_length=100)
+=======
+    country_code: Optional[str] = Field(None, max_length=100)
+>>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3
     
     # Mặc định dùng Enum.VND
     currency_default: Optional[CurrencyType] = CurrencyType.VND
     
     contact_person: Optional[str] = Field(None, max_length=100)
+<<<<<<< HEAD
     email: EmailStr
+=======
+    email: Optional[EmailStr] = None
+>>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3
     tax_code: Optional[str] = Field(None, max_length=50)
     address: Optional[str] = None
     
@@ -36,7 +44,11 @@ class SupplierUpdate(BaseModel):
     
     # Cho phép update từng trường riêng lẻ
     origin_type: Optional[SupplierOriginType] = None
+<<<<<<< HEAD
     country: Optional[str] = Field(None, max_length=100)
+=======
+    country_code: Optional[str] = Field(None, max_length=100)
+>>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3
     currency_default: Optional[CurrencyType] = None
     
     contact_person: Optional[str] = Field(None, max_length=100)

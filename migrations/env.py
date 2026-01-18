@@ -12,7 +12,7 @@ sys.path.append(os.getcwd())
 
 # 2. Import Settings và Base Model từ ứng dụng của bạn
 from app.core.config import settings
-from app.db.base import Base
+from app.db.base_class import Base
 
 # [QUAN TRỌNG] Import tất cả các Models để Alembic nhận diện được bảng
 # Nếu không import ở đây, Alembic sẽ tưởng là chưa có bảng nào và xóa sạch DB cũ
@@ -39,8 +39,13 @@ from app.models.dye_color import DyeColor
 from app.models.user import User
 from app.models.log import Log
 from app.models.inventory_semi import SemiFinishedImportTicket, SemiFinishedImportDetail, SemiFinishedExportTicket, SemiFinishedExportDetail
+<<<<<<< HEAD
 from app.models.machine_log import MachineLog
 from app.models.weaving_daily_production import WeavingDailyProduction
+=======
+from app.models.weaving_daily_production import WeavingDailyProduction
+
+>>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3
 
 
 # 3. Lấy config từ alembic.ini

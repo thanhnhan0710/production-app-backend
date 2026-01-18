@@ -51,7 +51,11 @@ def search_baskets(
     if keyword:
         search_term = f"%{keyword}%"
         query = query.filter(
+<<<<<<< HEAD
             (Basket.basket_code.ilike(search_term))  
+=======
+            (Basket.basket_code.ilike(search_term)) 
+>>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3
         )
 
     # 2. Filter by exact status (READY, IN_USE...)

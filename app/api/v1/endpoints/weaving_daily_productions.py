@@ -133,4 +133,10 @@ def manual_calculation(
     db: Session = Depends(deps.get_db)
 ):
     """API này để chạy thủ công, cập nhật dữ liệu cho những ngày cũ"""
+<<<<<<< HEAD
+=======
+    # [SỬA LẠI TÊN HÀM CHO ĐÚNG]
+    # Sai: result = weaving_daily_production_service.calculate(db, target_date)
+    # Đúng:
+>>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3
     return weaving_daily_production_service.calculate_daily_production(db, target_date)

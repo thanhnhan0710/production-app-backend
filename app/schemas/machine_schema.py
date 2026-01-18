@@ -27,9 +27,13 @@ class MachineResponse(MachineBase):
     machine_id: int
 
     class Config:
+<<<<<<< HEAD
         from_attributes = True
         
 class MachineStatusUpdate(BaseModel):
     status: str
     reason: Optional[str] = None
     image_url: Optional[str] = None
+=======
+        from_attributes = True
+>>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3

@@ -1,16 +1,28 @@
 from sqlalchemy.orm import Session, joinedload
+<<<<<<< HEAD
 from sqlalchemy import or_, and_, desc
 from datetime import date
 from typing import Optional
 from sqlalchemy import func, distinct, cast, Date
 
 # Import Models
+=======
+from sqlalchemy import Date, cast, distinct, func, or_, and_, desc
+from datetime import date
+from typing import Optional
+
+# Import Models
+from app.models.weaving_basket_ticket import WeavingBasketTicket
+>>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3
 from app.models.weaving_daily_production import WeavingDailyProduction
 from app.models.product import Product
 
 # Import Schemas
 from app.schemas.weaving_daily_production_schema import WeavingProductionCreate, WeavingProductionUpdate
+<<<<<<< HEAD
 from app.models.weaving_basket_ticket import WeavingBasketTicket
+=======
+>>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3
 
 # =========================
 # GET LIST (CƠ BẢN)
@@ -141,6 +153,10 @@ def delete_production(db: Session, production_id: int):
     db.commit()
     return True
 
+<<<<<<< HEAD
+=======
+# [BỔ SUNG HÀM NÀY VÀO CUỐI FILE]
+>>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3
 def calculate_daily_production(db: Session, target_date: date):
     """
     Tính toán lại sản lượng cho một ngày cụ thể dựa trên các phiếu đã hoàn thành.

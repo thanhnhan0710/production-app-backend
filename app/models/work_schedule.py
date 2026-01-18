@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, Date, ForeignKey
 from sqlalchemy.orm import relationship
-from app.db.base import Base
+from app.db.base_class import Base
 
 class WorkSchedule(Base):
     __tablename__ = "work_schedules"

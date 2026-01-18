@@ -30,18 +30,28 @@ def get_machine(db: Session, machine_id: int):
 
 
 # =========================
+<<<<<<< HEAD
 # SEARCH
+=======
+# SEARCH (TÊN / MỤC ĐÍCH / TRẠNG THÁI / KHU VỰC)
+>>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3
 # =========================
 def search_machines(
     db: Session,
     keyword: str | None = None,
+<<<<<<< HEAD
     status: MachineStatus | None = None,
     area: MachineArea | None = None,
+=======
+    status: MachineStatus | None = None, # Dùng Enum type hint
+    area: MachineArea | None = None,     # Thêm bộ lọc khu vực
+>>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3
     skip: int = 0,
     limit: int = 100
 ):
     query = db.query(Machine)
 
+    # 1. Lọc theo từ khóa (Tên máy hoặc Mục đích sử dụng)
     if keyword:
         keyword_filter = f"%{keyword}%"
         query = query.filter(
@@ -51,9 +61,14 @@ def search_machines(
             )
         )
 
+    # 2. Lọc theo trạng thái (nếu có)
     if status:
         query = query.filter(Machine.status == status)
 
+<<<<<<< HEAD
+=======
+    # 3. Lọc theo khu vực (nếu có)
+>>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3
     if area:
         query = query.filter(Machine.area == area)
 
@@ -69,6 +84,7 @@ def search_machines(
 # CREATE
 # =========================
 def create_machine(db: Session, data: MachineCreate):
+    # data.model_dump() sẽ tự động convert Enum thành value string tương ứng nếu cần
     machine = Machine(**data.model_dump())
     db.add(machine)
     db.commit()
@@ -88,6 +104,7 @@ def update_machine(
     if not machine:
         return None
 
+    # exclude_unset=True: Chỉ lấy những trường người dùng gửi lên
     update_data = data.model_dump(exclude_unset=True)
 
     for k, v in update_data.items():
@@ -108,6 +125,7 @@ def delete_machine(db: Session, machine_id: int):
 
     db.delete(machine)
     db.commit()
+<<<<<<< HEAD
     return True
 
 
@@ -170,3 +188,6 @@ def get_machine_history(db: Session, machine_id: int, limit: int = 20):
         .order_by(MachineLog.start_time.desc())\
         .limit(limit)\
         .all()
+=======
+    return True
+>>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3
