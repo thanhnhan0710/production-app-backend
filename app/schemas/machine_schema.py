@@ -27,13 +27,11 @@ class MachineResponse(MachineBase):
     machine_id: int
 
     class Config:
-<<<<<<< HEAD
         from_attributes = True
-        
+
+# [GIỮ LẠI TỪ HEAD] Class dùng riêng cho API cập nhật trạng thái (ví dụ: Báo hỏng, Bảo trì)
 class MachineStatusUpdate(BaseModel):
-    status: str
+    # Mình sửa từ 'str' thành 'MachineStatus' để validate chặt chẽ hơn
+    status: MachineStatus 
     reason: Optional[str] = None
     image_url: Optional[str] = None
-=======
-        from_attributes = True
->>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3

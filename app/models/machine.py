@@ -1,10 +1,6 @@
 import enum
 from sqlalchemy import Column, Integer, String, Enum
-<<<<<<< HEAD
-from app.db.base import Base
-=======
 from app.db.base_class import Base
->>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3
 
 # 1. Định nghĩa các trạng thái của Máy
 class MachineStatus(str, enum.Enum):
@@ -38,8 +34,6 @@ class Machine(Base):
     )
 
     # [MỚI] Cột khu vực (Enum)
-    # nullable=True: cho phép để trống nếu chưa phân khu
-    # index=True: tạo index để sau này tìm kiếm/lọc theo khu vực nhanh hơn
     area = Column(
         Enum(MachineArea), 
         nullable=True, 

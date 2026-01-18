@@ -4,68 +4,53 @@ from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
-
 from alembic import context
 
-# 1. Thêm đường dẫn dự án vào sys.path để Alembic import được folder 'app'
-sys.path.append(os.getcwd())
+# ------------------------------------------------------------------------
+# 1. Cấu hình đường dẫn (Path Setup)
+# ------------------------------------------------------------------------
+# Thêm thư mục gốc của dự án vào sys.path để Python tìm thấy module 'app'
+# Sử dụng abspath để đảm bảo đường dẫn chính xác dù chạy lệnh ở đâu
+current_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(current_path)
 
-# 2. Import Settings và Base Model từ ứng dụng của bạn
+# ------------------------------------------------------------------------
+# 2. Import Settings và Base Model
+# ------------------------------------------------------------------------
 from app.core.config import settings
-from app.db.base_class import Base
 
-# [QUAN TRỌNG] Import tất cả các Models để Alembic nhận diện được bảng
-# Nếu không import ở đây, Alembic sẽ tưởng là chưa có bảng nào và xóa sạch DB cũ
-from app.models.department import Department
-from app.models.employee import Employee
-from app.models.yarn import Yarn
-from app.models.supplier import Supplier
-from app.models.yarn_lot import YarnLot
-from app.models.machine import Machine
-from app.models.basket import Basket
-from app.models.shift import Shift
-from app.models.unit import Unit
-from app.models.material import Material
-from app.models.product import Product
-from app.models.yarn_issue_slip import YarnIssueSlip
-from app.models.yarn_issue_slip_detail import YarnIssueSlipDetail
-from app.models.material_issue_slip import MaterialIssueSlip
-from app.models.material_issue_slip_detail import MaterialIssueSlipDetail
-from app.models.work_schedule import WorkSchedule
-from app.models.weaving_basket_ticket import WeavingBasketTicket
-from app.models.weaving_inspection import WeavingInspection
-from app.models.standard import Standard
-from app.models.dye_color import DyeColor
-from app.models.user import User
-from app.models.log import Log
-from app.models.inventory_semi import SemiFinishedImportTicket, SemiFinishedImportDetail, SemiFinishedExportTicket, SemiFinishedExportDetail
-<<<<<<< HEAD
-from app.models.machine_log import MachineLog
-from app.models.weaving_daily_production import WeavingDailyProduction
-=======
-from app.models.weaving_daily_production import WeavingDailyProduction
+# [QUAN TRỌNG] Import Base từ 'app.db.base' thay vì 'app.db.base_class'
+# Vì file 'app/db/base.py' của bạn đã import tất cả các Models (User, Product, Material...)
+# nên Base.metadata lúc này đã chứa đầy đủ thông tin các bảng.
+from app.db.base import Base 
 
->>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3
-
-
-# 3. Lấy config từ alembic.ini
+# ------------------------------------------------------------------------
+# 3. Config Alembic
+# ------------------------------------------------------------------------
 config = context.config
 
-# 4. Setup loggers
+# Setup loggers
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# 5. Gán Metadata của SQLAlchemy model cho Alembic
+# Gán Metadata của SQLAlchemy model cho Alembic
 target_metadata = Base.metadata
 
-# 6. Ghi đè URL kết nối DB bằng biến môi trường (Thay vì hardcode trong alembic.ini)
-# Điều này giúp bảo mật và linh hoạt khi deploy
-# Dòng đã sửa (Thêm .replace("%", "%%"))
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
+# ------------------------------------------------------------------------
+# 4. Ghi đè URL Database từ biến môi trường
+# ------------------------------------------------------------------------
+# Lấy URL từ settings (file .env)
+db_url = str(settings.DATABASE_URL)
+
+# Fix lỗi ký tự '%' trong mật khẩu (ConfigParser của Python hiểu nhầm % là biến)
+if "%" in db_url:
+    db_url = db_url.replace("%", "%%")
+
+config.set_main_option("sqlalchemy.url", db_url)
+
 
 def run_migrations_offline() -> None:
     """Chạy migration ở chế độ 'offline'.
-    Dùng để generate file SQL mà không cần kết nối DB thực tế (ít dùng).
     """
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
@@ -73,14 +58,15 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        compare_type=True, # [Option] So sánh cả kiểu dữ liệu column (VARCHAR thay đổi độ dài...)
     )
 
     with context.begin_transaction():
         context.run_migrations()
 
+
 def run_migrations_online() -> None:
     """Chạy migration ở chế độ 'online'.
-    Kết nối trực tiếp vào DB để so sánh và cập nhật.
     """
     connectable = engine_from_config(
         config.get_section(config.config_ini_section),
@@ -90,11 +76,14 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection, 
+            target_metadata=target_metadata,
+            compare_type=True, # [Option] So sánh cả thay đổi về kiểu dữ liệu
         )
 
         with context.begin_transaction():
             context.run_migrations()
+
 
 if context.is_offline_mode():
     run_migrations_offline()

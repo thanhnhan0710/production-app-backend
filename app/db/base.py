@@ -13,8 +13,6 @@ from app.models.material import Material
 from app.models.product import Product
 from app.models.yarn_issue_slip import YarnIssueSlip
 from app.models.yarn_issue_slip_detail import YarnIssueSlipDetail
-from app.models.material_issue_slip import MaterialIssueSlip
-from app.models.material_issue_slip_detail import MaterialIssueSlipDetail
 from app.models.work_schedule import WorkSchedule
 from app.models.weaving_basket_ticket import WeavingBasketTicket
 from app.models.weaving_inspection import WeavingInspection

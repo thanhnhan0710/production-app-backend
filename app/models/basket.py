@@ -16,11 +16,8 @@ class Basket(Base):
     basket_id = Column(Integer, primary_key=True, index=True)
     basket_code = Column(String(50), unique=True, index=True, nullable=False) 
     tare_weight = Column(Float, nullable=False)
-<<<<<<< HEAD
     
     # Trạng thái (Dùng Enum đã định nghĩa ở trên)
-=======
->>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3
     # default là READY (Sẵn sàng)
     status = Column(Enum(BasketStatus), default=BasketStatus.READY, nullable=False)
     note = Column(Text, nullable=True) # Ghi chú

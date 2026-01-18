@@ -1,10 +1,6 @@
 from sqlalchemy import Column, Integer, Float, Date, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
-<<<<<<< HEAD
-from app.db.base import Base
-=======
 from app.db.base_class import Base
->>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3
 
 class WeavingDailyProduction(Base):
     __tablename__ = "weaving_daily_productions"

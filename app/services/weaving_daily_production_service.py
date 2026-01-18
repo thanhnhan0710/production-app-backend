@@ -1,28 +1,16 @@
 from sqlalchemy.orm import Session, joinedload
-<<<<<<< HEAD
-from sqlalchemy import or_, and_, desc
-from datetime import date
-from typing import Optional
-from sqlalchemy import func, distinct, cast, Date
-
-# Import Models
-=======
 from sqlalchemy import Date, cast, distinct, func, or_, and_, desc
 from datetime import date
 from typing import Optional
 
 # Import Models
 from app.models.weaving_basket_ticket import WeavingBasketTicket
->>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3
 from app.models.weaving_daily_production import WeavingDailyProduction
 from app.models.product import Product
 
 # Import Schemas
 from app.schemas.weaving_daily_production_schema import WeavingProductionCreate, WeavingProductionUpdate
-<<<<<<< HEAD
-from app.models.weaving_basket_ticket import WeavingBasketTicket
-=======
->>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3
+
 
 # =========================
 # GET LIST (CƠ BẢN)
@@ -153,22 +141,17 @@ def delete_production(db: Session, production_id: int):
     db.commit()
     return True
 
-<<<<<<< HEAD
-=======
-# [BỔ SUNG HÀM NÀY VÀO CUỐI FILE]
->>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3
+# =========================
+# CALCULATE DAILY PRODUCTION (TỰ ĐỘNG TÍNH TOÁN)
+# =========================
 def calculate_daily_production(db: Session, target_date: date):
     """
     Tính toán lại sản lượng cho một ngày cụ thể dựa trên các phiếu đã hoàn thành.
     """
     print(f"🚀 Starting calculation for date: {target_date}")
 
-    # 1. Xóa dữ liệu cũ của ngày hôm đó để tính lại từ đầu (tránh duplicate/sai lệch)
-    # db.query(WeavingDailyProduction).filter(WeavingDailyProduction.date == target_date).delete()
-    # db.commit()
-    # (Optional: Nếu muốn clean sạch sẽ trước khi tính. Nếu dùng logic update bên dưới thì ko cần delete)
-
-    # 2. Query Aggregate từ bảng WeavingBasketTicket
+    # 1. Query Aggregate từ bảng WeavingBasketTicket
+    # Tính tổng kg, tổng mét và số lượng máy tham gia cho từng sản phẩm trong ngày đó
     results = (
         db.query(
             WeavingBasketTicket.product_id,
@@ -188,10 +171,10 @@ def calculate_daily_production(db: Session, target_date: date):
         print("⚠️ No finished tickets found for this date.")
         return {"message": f"No data found for {target_date}"}
 
-    # 3. Lưu vào bảng WeavingDailyProduction
+    # 2. Lưu vào bảng WeavingDailyProduction
     count_updated = 0
     for row in results:
-        # Tìm bản ghi cũ
+        # Tìm bản ghi cũ xem đã có chưa
         daily_record = (
             db.query(WeavingDailyProduction)
             .filter(

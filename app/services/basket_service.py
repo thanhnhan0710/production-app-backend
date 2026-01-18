@@ -35,7 +35,7 @@ def get_baskets(db: Session, skip: int = 0, limit: int = 100):
 
 def search_baskets(
     db: Session,
-    keyword: Optional[str] = None,       # Search by Code or Supplier
+    keyword: Optional[str] = None,       # Search by Code
     status: Optional[BasketStatus] = None, # Filter by Status
     min_weight: Optional[float] = None,    # Filter by Weight range
     max_weight: Optional[float] = None,
@@ -47,15 +47,12 @@ def search_baskets(
     """
     query = db.query(Basket)
 
-    # 1. Search by keyword (Basket Code OR Supplier)
+    # 1. Search by keyword (Basket Code)
+    # Lưu ý: Đã bỏ tìm kiếm theo Supplier vì cột này đã bị xóa khỏi DB
     if keyword:
         search_term = f"%{keyword}%"
         query = query.filter(
-<<<<<<< HEAD
-            (Basket.basket_code.ilike(search_term))  
-=======
             (Basket.basket_code.ilike(search_term)) 
->>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3
         )
 
     # 2. Filter by exact status (READY, IN_USE...)

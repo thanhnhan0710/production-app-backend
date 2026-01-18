@@ -1,4 +1,3 @@
-# C:\Users\nhan_\Documents\production-app-backend\app\models\user.py
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
 from app.db.base_class import Base
@@ -22,25 +21,13 @@ class User(Base):
     employee_id = Column(Integer, ForeignKey("employees.employee_id"), nullable=True)
     
     # Trạng thái & Phân quyền
-<<<<<<< HEAD
-    is_active = Column(Boolean, default=True)      
-    is_superuser = Column(Boolean, default=False)  
-    role = Column(String(50), default="staff")     
-    
-    # Relationships
-    logs = relationship("Log", back_populates="user")
-    
-    # [NEW] Relationship để lấy thông tin nhân viên (tên, chức vụ...)
-    employee = relationship("Employee", back_populates="user") 
-    # Lưu ý: Bên model Employee cũng cần có dòng: user = relationship("User", back_populates="employee", uselist=False)
-=======
-    
     is_active = Column(Boolean, default=True)      # Cho phép đăng nhập hay không
     is_superuser = Column(Boolean, default=False)  # Admin hệ thống
     role = Column(String(50), default="staff")     # Ví dụ: admin, manager, staff, worker
-    employee_id = Column(Integer, ForeignKey("employees.employee_id"), nullable=True)
     
     # Relationships
     logs = relationship("Log", back_populates="user")
-    employee = relationship("Employee")
->>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3
+    
+    # [NEW] Relationship để lấy thông tin nhân viên
+    # Sử dụng back_populates để truy vấn 2 chiều (cần khai báo user bên model Employee)
+    employee = relationship("Employee", back_populates="user")

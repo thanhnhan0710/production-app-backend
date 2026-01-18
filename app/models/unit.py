@@ -9,5 +9,3 @@ class Unit(Base):
     unit_name = Column(String(50), nullable=False, unique=True)
     note= Column(String(150), nullable=True)
 
-    # Quan hệ 1-n: Một đơn vị tính dùng cho nhiều vật tư
-    materials = relationship("Material", back_populates="unit")

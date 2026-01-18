@@ -9,10 +9,7 @@ from app.services.user_service import user_service
 
 router = APIRouter()
 
-<<<<<<< HEAD
-=======
-# 1. GET LIST (Sửa response_model thành UserListResponse)
->>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3
+# 1. GET LIST
 @router.get("/", response_model=UserListResponse)
 def read_users(
     db: Session = Depends(deps.get_db),
@@ -20,14 +17,10 @@ def read_users(
     limit: int = 100,
     keyword: Optional[str] = Query(None),
     role: Optional[str] = None,
-<<<<<<< HEAD
     # [LƯU Ý]: Frontend không gửi is_active, nghĩa là is_active=None. 
     # Backend sẽ trả về cả user Active và Inactive (đã xóa mềm).
     # Nếu bạn chỉ muốn hiện user chưa xóa, hãy đổi default thành True.
     is_active: Optional[bool] = None, 
-=======
-    is_active: Optional[bool] = None,
->>>>>>> c468be65d7388abd40a800c84aa27cfe56d2c0d3
     current_user: User = Depends(deps.get_current_active_user),
 ) -> Any:
     # ... (Giữ nguyên logic gọi user_service) ...
