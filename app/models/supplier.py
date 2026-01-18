@@ -1,16 +1,54 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
+import enum
+from sqlalchemy import Column, Integer, String, Boolean, Text, Enum
 from sqlalchemy.orm import relationship
 from app.db.base import Base
 
+# 1. Định nghĩa các Enum (Trạng thái/Loại)
+# Kế thừa str để khi serialize ra JSON (Pydantic) nó tự hiểu là string
+class SupplierOriginType(str, enum.Enum):
+    DOMESTIC = "Domestic"  # Trong nước
+    IMPORT = "Import"      # Nhập khẩu
+
+class CurrencyType(str, enum.Enum):
+    VND = "VND"
+    USD = "USD"
+
+# 2. Model Supplier
 class Supplier(Base):
     __tablename__ = "suppliers"
 
+    # --- Khóa chính ---
     supplier_id = Column(Integer, primary_key=True, index=True)
-    supplier_name = Column(String(100), nullable=False)
-    email = Column(String(100), unique=True, index=True, nullable=False)
-    phone = Column(String(20), nullable=True)
-    address=Column(String(150), nullable=True)
-    note=Column(String(150), nullable=True)
 
-    # Quan hệ n-1: Nhân viên thuộc về một phòng ban
+    # --- Thông tin định danh ---
+    supplier_name = Column(String(255), nullable=False)
+    short_name = Column(String(50), nullable=True)
+
+    # --- Phân loại (Dùng Enum) ---
+    # Map với: OriginType VARCHAR(20) CHECK (OriginType IN ('Domestic', 'Import'))
+    origin_type = Column(Enum(SupplierOriginType), nullable=True)
+
+    country = Column(String(100), nullable=True) # VD: VN, KR, CN
+
+    # --- Tài chính (Dùng Enum) ---
+    # Map với: CurrencyDefault VARCHAR(3) DEFAULT 'VND'
+    # Lưu ý: Set default bằng giá trị Enum (CurrencyType.VND)
+    currency_default = Column(
+        Enum(CurrencyType), 
+        default=CurrencyType.VND, 
+        nullable=True
+    )
+
+    tax_code = Column(String(50), nullable=True)
+
+    # --- Liên hệ ---
+    contact_person = Column(String(100), nullable=True)
+    email = Column(String(100), unique=True, index=True, nullable=False)
+    address = Column(Text, nullable=True)
+
+    # --- Vận hành ---
+    lead_time_days = Column(Integer, default=7)
+    is_active = Column(Boolean, default=True)
+
+    # --- Quan hệ ---
     yarns = relationship("Yarn", back_populates="supplier")

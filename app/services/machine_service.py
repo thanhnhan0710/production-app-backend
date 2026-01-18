@@ -1,7 +1,9 @@
+from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
-from app.models.machine import Machine
+from app.models.machine import Machine, MachineStatus, MachineArea
 from app.schemas.machine_schema import MachineCreate, MachineUpdate
+from app.models.machine_log import MachineLog
 
 
 # =========================
@@ -28,28 +30,32 @@ def get_machine(db: Session, machine_id: int):
 
 
 # =========================
-# SEARCH (MÃ / TÊN / TRẠNG THÁI)
+# SEARCH
 # =========================
 def search_machines(
     db: Session,
     keyword: str | None = None,
-    status: str | None = None,
+    status: MachineStatus | None = None,
+    area: MachineArea | None = None,
     skip: int = 0,
     limit: int = 100
 ):
     query = db.query(Machine)
 
     if keyword:
+        keyword_filter = f"%{keyword}%"
         query = query.filter(
             or_(
-                Machine.machine_id.ilike(f"%{keyword}%")
-                if hasattr(Machine.machine_id, "ilike") else False,
-                Machine.machine_name.ilike(f"%{keyword}%")
+                Machine.machine_name.ilike(keyword_filter),
+                Machine.purpose.ilike(keyword_filter)
             )
         )
 
     if status:
         query = query.filter(Machine.status == status)
+
+    if area:
+        query = query.filter(Machine.area == area)
 
     return (
         query
@@ -71,7 +77,7 @@ def create_machine(db: Session, data: MachineCreate):
 
 
 # =========================
-# UPDATE (PATCH STYLE)
+# UPDATE
 # =========================
 def update_machine(
     db: Session,
@@ -103,3 +109,64 @@ def delete_machine(db: Session, machine_id: int):
     db.delete(machine)
     db.commit()
     return True
+
+
+# =========================
+# UPDATE STATUS (SỬA LỖI Ở ĐÂY)
+# =========================
+def update_machine_status(
+    db: Session, 
+    machine_id: int, 
+    new_status: str, 
+    reason: str = None, 
+    image_url: str = None
+):
+    # [SỬA LỖI]: Đổi Machine.id thành Machine.machine_id
+    machine = db.query(Machine).filter(Machine.machine_id == machine_id).first()
+    
+    if not machine:
+        return None
+
+    # Nếu trạng thái không đổi thì không cần làm gì
+    if machine.status == new_status:
+        return machine
+
+    current_time = datetime.now()
+
+    # 2. Tìm log cũ đang mở (end_time là Null) và ĐÓNG NÓ LẠI
+    last_log = db.query(MachineLog).filter(
+        MachineLog.machine_id == machine_id,
+        MachineLog.end_time == None
+    ).order_by(MachineLog.start_time.desc()).first()
+
+    if last_log:
+        last_log.end_time = current_time
+
+    # 3. TẠO LOG MỚI
+    new_log = MachineLog(
+        machine_id=machine_id,
+        status=new_status,
+        start_time=current_time,
+        end_time=None, # Đang diễn ra
+        reason=reason,
+        image_url=image_url
+    )
+    db.add(new_log)
+
+    # 4. Cập nhật trạng thái hiện tại vào bảng Machine
+    machine.status = new_status
+    
+    db.commit()
+    db.refresh(machine)
+    return machine
+
+
+# =========================
+# GET HISTORY
+# =========================
+def get_machine_history(db: Session, machine_id: int, limit: int = 20):
+    return db.query(MachineLog)\
+        .filter(MachineLog.machine_id == machine_id)\
+        .order_by(MachineLog.start_time.desc())\
+        .limit(limit)\
+        .all()

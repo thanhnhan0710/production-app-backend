@@ -3,26 +3,27 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api import deps
-from app.schemas.user_schema import UserCreate, UserUpdate, UserResponse
+from app.schemas.user_schema import UserCreate, UserUpdate, UserResponse, UserListResponse
 from app.models.user import User
 from app.services.user_service import user_service
 from app.services.log_service import log_service
 
 router = APIRouter()
 
-@router.get("/", response_model=dict)
+@router.get("/", response_model=UserListResponse)
 def read_users(
     db: Session = Depends(deps.get_db),
     skip: int = 0,
     limit: int = 100,
     keyword: Optional[str] = Query(None),
     role: Optional[str] = None,
-    is_active: Optional[bool] = None,
-    current_user: User = Depends(deps.get_current_active_user), # Yêu cầu phải login
+    # [LƯU Ý]: Frontend không gửi is_active, nghĩa là is_active=None. 
+    # Backend sẽ trả về cả user Active và Inactive (đã xóa mềm).
+    # Nếu bạn chỉ muốn hiện user chưa xóa, hãy đổi default thành True.
+    is_active: Optional[bool] = None, 
+    current_user: User = Depends(deps.get_current_active_user),
 ) -> Any:
-    """
-    Lấy danh sách users (Có tìm kiếm & phân trang).
-    """
+    # ... (Giữ nguyên logic gọi user_service) ...
     users, total = user_service.get_users(
         db, 
         skip=skip, 

@@ -1,7 +1,14 @@
-from typing import Optional
+# C:\Users\nhan_\Documents\production-app-backend\app\schemas\user_schema.py
+from typing import List, Optional
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
 
-# 1. Base Schema: Chứa các trường chung
+# [NEW] Schema nhỏ để hiển thị thông tin Employee lồng bên trong User
+class EmployeeShortInfo(BaseModel):
+    full_name: str
+    # Có thể thêm các field khác nếu frontend cần
+    model_config = ConfigDict(from_attributes=True)
+
+# 1. Base Schema
 class UserBase(BaseModel):
     email: EmailStr
     full_name: Optional[str] = None
@@ -9,12 +16,17 @@ class UserBase(BaseModel):
     is_active: Optional[bool] = True
     is_superuser: bool = False
     role: str = "staff"
+    
+    # [NEW] Thêm employee_id vào base
+    employee_id: Optional[int] = None
 
-# 2. Create Schema: Dùng khi tạo User mới (Bắt buộc có Password)
+# 2. Create Schema
 class UserCreate(UserBase):
-    password: str = Field(..., min_length=6, description="Mật khẩu tối thiểu 6 ký tự")
+    email: EmailStr
+    password: str
+    full_name: str 
 
-# 3. Update Schema: Dùng khi cập nhật thông tin (Tất cả đều Optional)
+# 3. Update Schema
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     full_name: Optional[str] = None
@@ -22,16 +34,27 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
     is_active: Optional[bool] = None
     role: Optional[str] = None
+    
+    # [NEW] Cho phép update employee_id
+    employee_id: Optional[int] = None
 
-# 4. Response Schema: Dùng để trả về dữ liệu (Ẩn Password)
+# 4. Response Schema
 class UserResponse(UserBase):
     user_id: int
     
-    # Cấu hình để Pydantic đọc được dữ liệu từ SQLAlchemy model
+    # [NEW] Trả về object employee để frontend lấy được full_name
+    # Frontend gọi: json['employee']['full_name']
+    employee: Optional[EmployeeShortInfo] = None
+    
     model_config = ConfigDict(from_attributes=True)
 
-# 5. Login Schema: Dùng riêng cho API đăng nhập
+# 5. Login Schema
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
+class UserListResponse(BaseModel):
+    data: List[UserResponse]  # Quan trọng: Khai báo list này chứa UserResponse
+    total: int
+    skip: int
+    limit: int

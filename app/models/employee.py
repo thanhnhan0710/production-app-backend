@@ -23,3 +23,4 @@ class Employee(Base):
     # Quan hệ
     department = relationship("Department", back_populates="employees")
     work_schedules = relationship("WorkSchedule", back_populates="employee")
+    user = relationship("User", back_populates="employee", uselist=False)

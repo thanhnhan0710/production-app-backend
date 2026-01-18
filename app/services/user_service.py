@@ -1,5 +1,6 @@
-from sqlalchemy.orm import Session
-from sqlalchemy import or_  # Cần import thêm or_ để tìm kiếm Tên HOẶC Email
+# C:\Users\nhan_\Documents\production-app-backend\app\services\user_service.py
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import or_
 from typing import Optional, List, Tuple
 
 from app.models.user import User
@@ -10,6 +11,7 @@ class UserService:
     
     # --- BASIC CRUD ---
     def get_by_id(self, db: Session, user_id: int) -> Optional[User]:
+        # [OPTIONAL] Thêm options(joinedload(User.employee)) nếu muốn lấy info employee khi get detail
         return db.query(User).filter(User.user_id == user_id).first()
 
     def get_by_email(self, db: Session, email: str) -> Optional[User]:
@@ -26,18 +28,12 @@ class UserService:
         role: Optional[str] = None,
         is_active: Optional[bool] = None,
     ) -> Tuple[List[User], int]:
-        """
-        Tìm kiếm nâng cao:
-        - keyword: Tìm trong Tên hoặc Email
-        - filters: role, is_active, department_id
-        - return: (danh sách user, tổng số lượng bản ghi tìm thấy)
-        """
+        
         query = db.query(User)
 
-        # 1. Lọc theo từ khóa (Tìm kiếm mờ - LIKE)
+        # 1. Lọc theo từ khóa
         if keyword:
             search_format = f"%{keyword}%"
-            # Tìm xem keyword có nằm trong full_name HOẶC email không
             query = query.filter(
                 or_(
                     User.full_name.ilike(search_format),
@@ -45,20 +41,17 @@ class UserService:
                 )
             )
 
-        # 2. Lọc theo Role (chính xác)
         if role:
             query = query.filter(User.role == role)
 
-        # 3. Lọc theo Trạng thái
         if is_active is not None:
             query = query.filter(User.is_active == is_active)
 
-
-        # Tính tổng số bản ghi trước khi phân trang (để FE làm phân trang)
         total = query.count()
 
-        # Áp dụng phân trang
-        users = query.offset(skip).limit(limit).all()
+        # [NEW] Sử dụng joinedload để load luôn thông tin Employee
+        # Giúp Frontend có dữ liệu json['employee']['full_name'] ngay lập tức
+        users = query.options(joinedload(User.employee)).offset(skip).limit(limit).all()
 
         return users, total
 
@@ -73,7 +66,9 @@ class UserService:
             phone_number=user.phone_number,
             role=user.role,
             is_active=user.is_active,
-            is_superuser=user.is_superuser
+            is_superuser=user.is_superuser,
+            # [NEW] Lưu employee_id
+            employee_id=user.employee_id
         )
         
         db.add(db_user)
@@ -89,6 +84,7 @@ class UserService:
             del update_data["password"]
             update_data["hashed_password"] = hashed_password
 
+        # Tự động map các field còn lại (bao gồm cả employee_id nếu có)
         for key, value in update_data.items():
             setattr(db_user, key, value)
 
@@ -97,14 +93,8 @@ class UserService:
         db.refresh(db_user)
         return db_user
 
-    # --- DELETE METHODS ---
-    
+    # --- DELETE METHODS --- (Giữ nguyên như cũ)
     def soft_delete_user(self, db: Session, user_id: int) -> Optional[User]:
-        """
-        Xóa mềm: Chỉ set is_active = False.
-        Dữ liệu vẫn còn trong DB để tra cứu lịch sử.
-        Khuyên dùng cách này.
-        """
         user = self.get_by_id(db, user_id)
         if user:
             user.is_active = False
@@ -114,11 +104,6 @@ class UserService:
         return user
 
     def delete_user(self, db: Session, user_id: int) -> Optional[User]:
-        """
-        Xóa cứng: Bay màu khỏi Database vĩnh viễn.
-        Cẩn thận: Có thể lỗi nếu User này đang dính khóa ngoại (Foreign Key)
-        với các bảng khác (ví dụ bảng Orders, Logs).
-        """
         user = self.get_by_id(db, user_id)
         if user:
             db.delete(user)

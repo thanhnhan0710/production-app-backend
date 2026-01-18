@@ -16,7 +16,6 @@ class Basket(Base):
     basket_id = Column(Integer, primary_key=True, index=True)
     basket_code = Column(String(50), unique=True, index=True, nullable=False) 
     tare_weight = Column(Float, nullable=False)
-    supplier = Column(String(100), nullable=True)
     
     # Trạng thái (Dùng Enum đã định nghĩa ở trên)
     # default là READY (Sẵn sàng)
