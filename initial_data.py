@@ -16,7 +16,7 @@ def init_superuser():
     
     db: Session = SessionLocal()
     
-    email = "admin@example.com"
+    email = "admin@oppermann-group.com"
     password = "admin123"
     
     user = db.query(User).filter(User.email == email).first()

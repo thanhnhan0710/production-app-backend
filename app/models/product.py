@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String
-from app.db.base_class import Base
 from sqlalchemy.orm import relationship
+from app.db.base_class import Base
 
 class Product(Base):
     __tablename__ = "products"
@@ -10,4 +10,9 @@ class Product(Base):
     note = Column(String(255), nullable=True)
     image_url = Column(String(255), nullable=True)
 
+    # Relationships
+    # Sử dụng string "BOMHeader" để tránh circular import
+    boms = relationship("BOMHeader", back_populates="product")
+    
+    # Giả định bảng Standard nằm ở file khác
     standards = relationship("Standard", back_populates="product")

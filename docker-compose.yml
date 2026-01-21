@@ -28,6 +28,7 @@ services:
       - "3308:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+      - ./static:/app/static
     
     # --- PHẦN QUAN TRỌNG VỪA THÊM VÀO ---
     healthcheck:
@@ -40,3 +41,4 @@ services:
 
 volumes:
   mysql_data:
+ 
