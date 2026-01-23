@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import date
 
 from app.api import deps
@@ -8,12 +8,22 @@ from app.models.purchase_order import POStatus
 from app.schemas.purchase_order_schema import (
     POHeaderCreate, 
     POHeaderUpdate, 
-    POHeaderResponse, # Giả định bạn đã tạo schema này để trả về dữ liệu (bao gồm cả list details)
+    POHeaderResponse, 
     PODetailCreate
 )
 from app.services.purchase_order_service import PurchaseOrderService
 
 router = APIRouter()
+
+# [MỚI] Endpoint lấy số PO tự động
+@router.get("/next-number", response_model=Dict[str, str])
+def get_next_po_number(db: Session = Depends(deps.get_db)):
+    """
+    Sinh số PO tiếp theo: V[YY]xxxx (VD: V260001).
+    """
+    service = PurchaseOrderService(db)
+    new_number = service.generate_next_po_number()
+    return {"po_number": new_number}
 
 @router.get("/", response_model=List[POHeaderResponse])
 def read_purchase_orders(
@@ -26,9 +36,6 @@ def read_purchase_orders(
     to_date: Optional[date] = None,
     db: Session = Depends(deps.get_db)
 ):
-    """
-    Lấy danh sách PO với các bộ lọc nâng cao (Tìm kiếm số PO, Vendor, Status, Ngày).
-    """
     service = PurchaseOrderService(db)
     return service.get_multi(
         skip=skip, 
@@ -45,9 +52,6 @@ def create_purchase_order(
     po_in: POHeaderCreate, 
     db: Session = Depends(deps.get_db)
 ):
-    """
-    Tạo mới một Purchase Order (kèm theo details nếu có).
-    """
     service = PurchaseOrderService(db)
     return service.create(obj_in=po_in)
 
@@ -56,9 +60,6 @@ def read_purchase_order(
     po_id: int, 
     db: Session = Depends(deps.get_db)
 ):
-    """
-    Lấy chi tiết một PO theo ID.
-    """
     service = PurchaseOrderService(db)
     po = service.get(po_id)
     if not po:
@@ -71,9 +72,6 @@ def update_purchase_order(
     po_in: POHeaderUpdate, 
     db: Session = Depends(deps.get_db)
 ):
-    """
-    Cập nhật thông tin Header của PO (Trạng thái, Ghi chú, Ngày...).
-    """
     service = PurchaseOrderService(db)
     po = service.get(po_id)
     if not po:
@@ -87,11 +85,7 @@ def add_purchase_order_item(
     item_in: PODetailCreate, 
     db: Session = Depends(deps.get_db)
 ):
-    """
-    Thêm một dòng chi tiết (vật tư) vào PO đã tồn tại.
-    """
     service = PurchaseOrderService(db)
-    # Hàm add_item trong service đã xử lý check exists, nhưng ta có thể check trước để clear code
     po = service.get(po_id)
     if not po:
         raise HTTPException(status_code=404, detail="Purchase Order not found")
@@ -103,11 +97,19 @@ def read_purchase_order_by_number(
     po_number: str, 
     db: Session = Depends(deps.get_db)
 ):
-    """
-    Tìm PO chính xác theo Số PO (PO Number).
-    """
     service = PurchaseOrderService(db)
     po = service.get_by_number(po_number)
     if not po:
         raise HTTPException(status_code=404, detail="Purchase Order not found")
     return po
+
+@router.delete("/{po_id}")
+def delete_purchase_order(
+    po_id: int, 
+    db: Session = Depends(deps.get_db)
+):
+    """
+    Xóa một Purchase Order (Chỉ áp dụng cho trạng thái Draft).
+    """
+    service = PurchaseOrderService(db)
+    return service.delete(po_id)

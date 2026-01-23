@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_
+from sqlalchemy import or_, desc
 from fastapi import HTTPException
 from typing import List, Optional
 from datetime import date
@@ -32,7 +32,6 @@ class PurchaseOrderService:
         to_date: date = None
     ) -> List[PurchaseOrderHeader]:
         query = self.db.query(PurchaseOrderHeader).options(
-            # Load vendor để hiển thị tên ở danh sách ngoài
             joinedload(PurchaseOrderHeader.vendor) 
         )
 
@@ -53,9 +52,42 @@ class PurchaseOrderService:
 
         return query.order_by(PurchaseOrderHeader.order_date.desc()).offset(skip).limit(limit).all()
 
+    # [UPDATED] Hàm sinh số PO tự động tăng dần: V00000001, V00000002...
+    def generate_next_po_number(self) -> str:
+        # Tìm số PO lớn nhất hiện tại bắt đầu bằng 'V'
+        last_po = self.db.query(PurchaseOrderHeader)\
+            .filter(PurchaseOrderHeader.po_number.like("V%"))\
+            .order_by(desc(PurchaseOrderHeader.po_number))\
+            .first()
+        
+        if not last_po:
+            # Chưa có PO nào, bắt đầu từ 1
+            return "V00000001"
+        
+        try:
+            current_code = last_po.po_number
+            # Bỏ ký tự 'V' đầu tiên để lấy phần số
+            # VD: V00000005 -> 00000005 -> 5
+            number_part = int(current_code[1:])
+            
+            # Tăng lên 1
+            next_number = number_part + 1
+            
+            # Format lại thành chuỗi có 8 chữ số, đệm số 0
+            return f"V{next_number:08d}"
+        except (ValueError, IndexError):
+            # Fallback an toàn nếu dữ liệu cũ không đúng chuẩn
+            return "V00000001"
+
     def create(self, obj_in: POHeaderCreate) -> PurchaseOrderHeader:
+        # Tự động sinh số PO nếu không có hoặc là "AUTO"
+        if not obj_in.po_number or obj_in.po_number.strip().upper() == "AUTO":
+            obj_in.po_number = self.generate_next_po_number()
+        
+        # Kiểm tra trùng (Double check)
         if self.get_by_number(obj_in.po_number):
-            raise HTTPException(status_code=400, detail="Số PO đã tồn tại.")
+            # Nếu trùng do race condition, có thể thử sinh lại hoặc báo lỗi
+            raise HTTPException(status_code=400, detail=f"Số PO {obj_in.po_number} đã tồn tại.")
 
         db_header = PurchaseOrderHeader(
             po_number=obj_in.po_number,
@@ -93,7 +125,6 @@ class PurchaseOrderService:
         db_header.total_amount = total_amount_calc
         
         self.db.commit()
-        # [QUAN TRỌNG] Gọi lại self.get để trả về object đầy đủ quan hệ (Vendor, Material...)
         return self.get(db_header.po_id)
 
     def update(self, db_obj: PurchaseOrderHeader, obj_in: POHeaderUpdate) -> PurchaseOrderHeader:
@@ -103,12 +134,10 @@ class PurchaseOrderService:
         
         self.db.add(db_obj)
         self.db.commit()
-        # [QUAN TRỌNG] Gọi lại self.get
         return self.get(db_obj.po_id)
 
     def add_item(self, po_id: int, item_in: PODetailCreate) -> PurchaseOrderHeader:
-        """Thêm 1 dòng vào PO đã có & Cập nhật lại tổng tiền"""
-        po = self.get(po_id) # Lấy PO hiện tại (đã có details)
+        po = self.get(po_id) 
         if not po:
             raise HTTPException(status_code=404, detail="PO not found")
 
@@ -125,9 +154,24 @@ class PurchaseOrderService:
         )
         self.db.add(new_detail)
         
-        # Cập nhật tổng tiền header
         po.total_amount += line_total
         
         self.db.commit()
-        # [QUAN TRỌNG] Gọi lại self.get để item mới thêm có kèm thông tin Material/UOM
         return self.get(po_id)
+    
+    def delete(self, po_id: int):
+        db_obj = self.get(po_id)
+        if not db_obj:
+            raise HTTPException(status_code=404, detail="Đơn hàng không tồn tại.")
+        
+        # Chỉ cho phép xóa khi đang ở trạng thái Draft (Nháp)
+        if db_obj.status != POStatus.DRAFT: # Giả định enum là DRAFT, nếu là Draft thì sửa lại cho khớp model
+             raise HTTPException(status_code=400, detail="Chỉ có thể xóa đơn hàng ở trạng thái Nháp (Draft).")
+
+        # Xóa các chi tiết trước (Nếu DB không cấu hình Cascade Delete)
+        for detail in db_obj.details:
+            self.db.delete(detail)
+            
+        self.db.delete(db_obj)
+        self.db.commit()
+        return {"message": "Đã xóa đơn hàng thành công."}

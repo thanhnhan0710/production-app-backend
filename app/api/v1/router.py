@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from app.api.v1.endpoints import (
+    batches,
     departments,
     employees, 
     yarns,
@@ -27,6 +28,9 @@ from app.api.v1.endpoints import (
     bom_details,
     purchase_orders,
     import_declarations,
+    warehouses,
+    material_receipts,
+    iqc_results
 )
 
 api_router = APIRouter()
@@ -59,4 +63,8 @@ api_router.include_router(bom_headers.router, prefix="/bom-headers", tags=["BOM 
 api_router.include_router(bom_details.router, prefix="/bom-details", tags=["BOM Details"])
 api_router.include_router(purchase_orders.router, prefix="/purchase-orders", tags=["Purchase Orders"])
 api_router.include_router(import_declarations.router, prefix="/import-declarations", tags=["Import Declarations"])
+api_router.include_router(warehouses.router, prefix="/warehouses", tags=["Warehouses"])
+api_router.include_router(material_receipts.router, prefix="/material-receipts", tags=["Material Receipts"])
+api_router.include_router(batches.router, prefix="/batches", tags=["Batches"])
+api_router.include_router(iqc_results.router, prefix="/iqc-results", tags=["Iqc Results"])
 
