@@ -24,8 +24,7 @@ from app.api.v1.endpoints import (
     users,
     upload,
     weaving_daily_productions,
-    bom_headers,
-    bom_details,
+    boms,
     purchase_orders,
     import_declarations,
     warehouses,
@@ -59,8 +58,7 @@ api_router.include_router(users.router, prefix="/users", tags=["Users"])
 api_router.include_router(upload.router, prefix="/upload", tags=["Upload"])
 api_router.include_router(weaving_daily_productions.router, prefix="/weaving-daily-productions", tags=["Weaving Daily Productions"])
 # Ví dụ trong app/api/v1/api.py
-api_router.include_router(bom_headers.router, prefix="/bom-headers", tags=["BOM Headers"])
-api_router.include_router(bom_details.router, prefix="/bom-details", tags=["BOM Details"])
+api_router.include_router(boms.router, prefix="/boms", tags=["BOM"])
 api_router.include_router(purchase_orders.router, prefix="/purchase-orders", tags=["Purchase Orders"])
 api_router.include_router(import_declarations.router, prefix="/import-declarations", tags=["Import Declarations"])
 api_router.include_router(warehouses.router, prefix="/warehouses", tags=["Warehouses"])

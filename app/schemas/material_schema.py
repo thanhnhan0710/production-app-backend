@@ -5,7 +5,6 @@ from app.schemas.unit_schema import UnitResponse
 # 1. Base Schema: Chứa các trường chung bắt buộc
 class MaterialBase(BaseModel):
     material_code: str = Field(..., title="Mã sợi", max_length=50, example="POY-1000D-BLACK")
-    material_name: str = Field(..., title="Tên sợi", max_length=100)
     material_type: Optional[str] = Field(None, title="Loại sợi", max_length=100)
     
     # Thông số kỹ thuật

@@ -1,21 +1,21 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Optional
 
 class Settings(BaseSettings):
+    # 1. Các biến cơ bản
     API_V1_STR: str = "/api/v1"
-    
-    # Gán giá trị mặc định (phòng hờ Docker chưa truyền vào kịp)
-    SECRET_KEY: str = "AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-GGGG"
     ALGORITHM: str = "HS256"
-    # QUAN TRỌNG: Phải gán giá trị mặc định chuỗi kết nối DB
-    # Để nếu không tìm thấy biến môi trường, nó sẽ dùng cái này.
-    DATABASE_URL: str = "mysql+pymysql://root:Mysql%402025@db:3306/production_management"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8  # 8 ngày
+    
+    # 2. Các biến nhạy cảm (Nên để Optional hoặc không gán mặc định để bắt buộc phải có trong .env)
+    SECRET_KEY: str
+    DATABASE_URL: str
 
-    class Config:
-        env_file = ".env"
-        # Bỏ qua các biến thừa trong file .env để đỡ lỗi
-        extra = "ignore" 
-    # --- THÊM DÒNG NÀY VÀO ---
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8  # Ví dụ: 8 ngày (hoặc để 30 là 30 phút)
-    # -------------------------
+    # 3. Cấu hình mới của Pydantic v2
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore"  # Bỏ qua các biến thừa trong .env
+    )
 
 settings = Settings()

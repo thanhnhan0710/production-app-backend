@@ -3,52 +3,46 @@ from sqlalchemy import Column, Integer, String, Float, ForeignKey, Enum
 from sqlalchemy.orm import relationship
 from app.db.base_class import Base
 
-# 1. Định nghĩa loại thành phần trong cấu trúc dệt (Nằm chung với bảng sử dụng nó)
 class BOMComponentType(str, enum.Enum):
-    WARP = "Warp"       # Sợi dọc (Đi theo chiều dài dây)
-    WEFT = "Weft"       # Sợi ngang (Đi theo chiều rộng dây)
-    BINDER = "Binder"   # Sợi biên/khóa (Giữ mép dây)
-    DYE = "Dye"         # Hóa chất nhuộm (Nếu có nhuộm)
+    GROUND = "Ground"
+    GRD_MARKER = "Grd. Marker"
+    EDGE = "Edge"
+    BINDER = "Binder"
+    STUFFER = "Stuffer"
+    CATCH_CORD = "Catch cord"
+    FILLING = "Filling"
+    SECOND_FILLING = "2nd Filling"
 
-# 3. Bảng BOM Detail (Chi tiết nguyên liệu)
 class BOMDetail(Base):
     __tablename__ = "bom_details"
 
     detail_id = Column(Integer, primary_key=True, index=True)
-    
-    # Liên kết về Header
     bom_id = Column(Integer, ForeignKey("bom_headers.bom_id"), nullable=False)
-    
-    # Liên kết về Vật tư (Sợi)
-    # Giả định bảng 'materials' có khoá chính là 'id'
     material_id = Column(Integer, ForeignKey("materials.id"), nullable=False)
     
-    # Loại sợi (Dọc/Ngang) - Rất quan trọng cho bộ phận Kế hoạch sản xuất
+    # Loại thành phần (Cột A trong Excel)
     component_type = Column(Enum(BOMComponentType), nullable=False)
     
-    # --- CÁC TRƯỜNG ĐỊNH MỨC KỸ THUẬT ---
+    # --- CÁC TRƯỜNG KỸ THUẬT CHI TIẾT ---
     
-    # 1. Số lượng sợi (Total Ends) - Chỉ dùng cho Sợi Dọc
-    # VD: Dây đai rộng 5cm cần 200 sợi dọc chạy song song
-    number_of_ends = Column(Integer, nullable=True, default=0, comment="Tổng số sợi dọc")
+    threads = Column(Integer, default=0, comment="Số đầu sợi (Cột B)")
+    yarn_dtex = Column(Float, comment="Độ mảnh sợi dtex (Cột C)")
+    yarn_type_name = Column(String(100), comment="Mã sợi/Màu (Cột D - VD: 03300-PES-WEISS)")
     
-    # 2. Định mức tiêu hao (Consumption)
-    # VD: Cần 15g sợi cho 1 mét dây thành phẩm
-    quantity_standard = Column(Float, nullable=False, comment="Số lượng chuẩn (g/m)")
+    twisted = Column(Float, default=1.0, comment="Hệ số xoắn (Cột E)")
+    crossweave_rate = Column(Float, default=0.0, comment="Độ dôi sợi/Crimp % (Cột F)")
     
-    # 3. Tỷ lệ hao hụt (Wastage)
-    # Trong dệt, hao hụt do nối sợi, đầu mấu, dệt thử máy rất cao (2-5%)
-    wastage_rate = Column(Float, default=0.0, comment="Tỷ lệ hao hụt (%)")
+    # Kết quả tính toán
+    weight_per_yarn_gm = Column(Float, comment="Trọng lượng lý thuyết g/m (Cột G)")
     
-    # 4. Tổng nhu cầu (Gross Quantity)
-    # Gross = Standard * (1 + Wastage/100)
-    quantity_gross = Column(Float, nullable=False, comment="Tổng lượng cần xuất kho bao gồm hao hụt")
+    # Thông số đo đạc thực tế (Lab test)
+    actual_length_cm = Column(Float, comment="Chiều dài sợi thực tế đo được (Cột H)")
+    actual_weight_cal = Column(Float, comment="Trọng lượng thực tế tính toán (Cột I)")
+    
+    weight_percentage = Column(Float, comment="Tỷ lệ % khối lượng (Cột J)")
+    bom_gm = Column(Float, comment="Định mức chốt cuối cùng (Cột K)")
 
-    # Ghi chú kỹ thuật (VD: Sợi này nằm ở mép trái)
     note = Column(String(200), nullable=True)
 
-    # Relationships
     header = relationship("BOMHeader", back_populates="bom_details")
-    
-    # Giả định Model Material đã được define ở file khác
     material = relationship("Material")
