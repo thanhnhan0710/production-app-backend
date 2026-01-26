@@ -39,6 +39,18 @@ class BOMService:
             twisted = d_data.get('twisted', 1.0)
             crossweave = d_data.get('crossweave_rate', 0.0)
             actual_len = d_data.get('actual_length_cm', 0.0)
+            
+            # --- [FIX LOGIC] Lấy component_type an toàn ---
+            raw_type = d_data.get('component_type')
+            
+            # Kiểm tra nếu là Enum Object (có thuộc tính .value) thì lấy value, ngược lại ép kiểu string
+            if hasattr(raw_type, 'value'):
+                comp_type = str(raw_type.value)
+            else:
+                comp_type = str(raw_type) if raw_type else ""
+            
+            # Chuẩn hóa về chữ in hoa và xóa khoảng trắng thừa để so sánh chính xác
+            comp_type = comp_type.upper().strip()
 
             # 2. Áp dụng công thức Excel
             # Formula: Weight Theoretical
@@ -47,8 +59,13 @@ class BOMService:
 
             # Formula: Actual Calculation (Hệ số 11000)
             actual_cal = (actual_len / 100) * (dtex / 11000) * threads
-            if details_list.component_type=="FILLING" or details_list.component_type=="2ND FILLING":
-                actual_cal=actual_cal/2
+            
+            # --- LOGIC ĐÃ CHỈNH SỬA ---
+            # So sánh với chuỗi IN HOA đã chuẩn hóa
+            # Nếu cần áp dụng cho cả 2ND FILLING, bạn có thể thêm: or comp_type == "2ND FILLING"
+            if comp_type == "FILLING":
+                actual_cal = actual_cal / 2
+                
             total_actual_cal += actual_cal
 
             # Lưu tạm vào list
