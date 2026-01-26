@@ -1,17 +1,20 @@
 import enum
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, Enum
+# 1. Thêm import DECIMAL
+from sqlalchemy import Column, Integer, String, ForeignKey, Enum, DECIMAL
 from sqlalchemy.orm import relationship
 from app.db.base_class import Base
 
 class BOMComponentType(str, enum.Enum):
-    GROUND = "Ground"
-    GRD_MARKER = "Grd. Marker"
-    EDGE = "Edge"
-    BINDER = "Binder"
-    STUFFER = "Stuffer"
-    CATCH_CORD = "Catch cord"
-    FILLING = "Filling"
-    SECOND_FILLING = "2nd Filling"
+    GROUND = "GROUND"
+    GRD_MARKER = "GRD. MARKER"
+    EDGE = "EDGE"
+    BINDER = "BINDER"
+    STUFFER = "STUFFER"
+    STUFFER_MAKER= "STUFFER MAKER"
+    LOCK= "LOCK"
+    CATCH_CORD = "CATCH CORD"
+    FILLING = "FILLING"
+    SECOND_FILLING = "2ND FILLING"
 
 class BOMDetail(Base):
     __tablename__ = "bom_details"
@@ -20,27 +23,40 @@ class BOMDetail(Base):
     bom_id = Column(Integer, ForeignKey("bom_headers.bom_id"), nullable=False)
     material_id = Column(Integer, ForeignKey("materials.id"), nullable=False)
     
-    # Loại thành phần (Cột A trong Excel)
-    component_type = Column(Enum(BOMComponentType), nullable=False)
+    component_type = Column(
+        Enum(
+            BOMComponentType, 
+            create_constraint=False,
+            values_callable=lambda obj: [e.value for e in obj] 
+        ), 
+        nullable=False
+    )
     
-    # --- CÁC TRƯỜNG KỸ THUẬT CHI TIẾT ---
-    
+    # Giữ nguyên Integer vì số sợi là số nguyên
     threads = Column(Integer, default=0, comment="Số đầu sợi (Cột B)")
-    yarn_dtex = Column(Float, comment="Độ mảnh sợi dtex (Cột C)")
-    yarn_type_name = Column(String(100), comment="Mã sợi/Màu (Cột D - VD: 03300-PES-WEISS)")
+
+    # --- CÁC CỘT ĐÃ CHUYỂN SANG DECIMAL(20, 10) ---
+
+    yarn_dtex = Column(DECIMAL(20, 10), comment="Độ mảnh sợi dtex (Cột C)")
     
-    twisted = Column(Float, default=1.0, comment="Hệ số xoắn (Cột E)")
-    crossweave_rate = Column(Float, default=0.0, comment="Độ dôi sợi/Crimp % (Cột F)")
+    yarn_type_name = Column(String(100), comment="Mã sợi/Màu (Cột D)")
     
-    # Kết quả tính toán
-    weight_per_yarn_gm = Column(Float, comment="Trọng lượng lý thuyết g/m (Cột G)")
+    # Default cũng nên để string hoặc decimal để tránh ép kiểu ngầm định ban đầu
+    twisted = Column(DECIMAL(20, 10), default=1.0, comment="Hệ số xoắn (Cột E)")
     
-    # Thông số đo đạc thực tế (Lab test)
-    actual_length_cm = Column(Float, comment="Chiều dài sợi thực tế đo được (Cột H)")
-    actual_weight_cal = Column(Float, comment="Trọng lượng thực tế tính toán (Cột I)")
+    crossweave_rate = Column(DECIMAL(20, 10), default=0.0, comment="Độ dôi sợi/Crimp % (Cột F)")
     
-    weight_percentage = Column(Float, comment="Tỷ lệ % khối lượng (Cột J)")
-    bom_gm = Column(Float, comment="Định mức chốt cuối cùng (Cột K)")
+    weight_per_yarn_gm = Column(DECIMAL(20, 10), comment="Trọng lượng lý thuyết g/m (Cột G)")
+    
+    actual_length_cm = Column(DECIMAL(20, 10), comment="Chiều dài sợi thực tế đo được (Cột H)")
+    
+    actual_weight_cal = Column(DECIMAL(20, 10), comment="Trọng lượng thực tế tính toán (Cột I)")
+    
+    weight_percentage = Column(DECIMAL(20, 10), comment="Tỷ lệ % khối lượng (Cột J)")
+    
+    bom_gm = Column(DECIMAL(20, 10), comment="Định mức chốt cuối cùng (Cột K)")
+    
+    # ---------------------------------------------
 
     note = Column(String(200), nullable=True)
 

@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_
+from sqlalchemy import or_, and_
 from fastapi import HTTPException
 
 # Import Models
@@ -13,9 +13,10 @@ from app.schemas.bom_schema import BOMHeaderCreate, BOMHeaderUpdate, BOMDetailCr
 class BOMService:
     
     @staticmethod
-    def _execute_bom_calculations(header_data, details_list):
+    def _execute_bom_calculations(header_data: BOMHeader, details_list: BOMDetail):
         """
         Hàm nội bộ: Tính toán lại toàn bộ định mức dệt (Logic Excel)
+        Giữ nguyên logic tính toán, chỉ đảm bảo mapping field đúng.
         """
         calculated_details = []
         total_actual_cal = 0.0
@@ -25,10 +26,9 @@ class BOMService:
             # 1. Chuẩn bị dữ liệu từ Input (hỗ trợ cả Pydantic object và Dict)
             if isinstance(d, BOMDetailCreate):
                 d_data = d.model_dump()
-                dtex = float(d.yarn_dtex) # Lấy từ computed_field của Pydantic
+                dtex = float(d.yarn_dtex) # Lấy từ computed_field
             else:
                 d_data = dict(d)
-                # Tự tính dtex nếu input là dict thuần
                 try:
                     dtex = float(d_data.get('yarn_type_name', '')[:5])
                 except:
@@ -42,16 +42,18 @@ class BOMService:
 
             # 2. Áp dụng công thức Excel
             # Formula: Weight Theoretical
-            weight_theoretical = ((threads * dtex * twisted * (1 + crossweave)) / 10000) * \
-                                 (1 + header_data.total_scrap_rate) * (1 + header_data.total_shrinkage_rate)
+            weight_theoretical = ((threads * dtex * twisted * (1 + (crossweave/100))) / 10000) * \
+                                 (1 + (header_data.total_scrap_rate/100)) * (1 + (header_data.total_shrinkage_rate/100))
 
             # Formula: Actual Calculation (Hệ số 11000)
             actual_cal = (actual_len / 100) * (dtex / 11000) * threads
+            if details_list.component_type=="FILLING" or details_list.component_type=="2ND FILLING":
+                actual_cal=actual_cal/2
             total_actual_cal += actual_cal
 
             # Lưu tạm vào list
             calculated_details.append({
-                "raw_data": d_data, # Dữ liệu gốc đã dump ra dict
+                "raw_data": d_data, 
                 "yarn_dtex": dtex,
                 "weight_per_yarn_gm": weight_theoretical,
                 "actual_weight_cal": actual_cal
@@ -60,29 +62,26 @@ class BOMService:
         # --- Vòng lặp 2: Tính tỷ trọng (%) và Finalize ---
         final_details = []
         for item in calculated_details:
+            
             # Tính %
-            percentage = item["actual_weight_cal"] / total_actual_cal if total_actual_cal > 0 else 0
+            percentage = (item["actual_weight_cal"] / total_actual_cal)*100 if total_actual_cal > 0 else 0
             # Tính BOM g/m
-            bom_gm = percentage * header_data.target_weight_gm * (1 + header_data.total_scrap_rate)
+            bom_gm = percentage /100 * header_data.target_weight_gm * (1 + header_data.total_scrap_rate/100)
 
-            # --- QUAN TRỌNG: Xử lý dữ liệu trước khi tạo Model ---
+            # Xử lý dữ liệu trước khi tạo Model
             detail_dict = item["raw_data"].copy()
             
-            # Xóa các trường computed/trùng lặp để tránh lỗi "multiple values for keyword argument"
-            # Vì chúng ta sẽ truyền các giá trị này thủ công ở bên dưới
+            # Xóa các trường computed/trùng lặp
             keys_to_remove = ['yarn_dtex', 'weight_per_yarn_gm', 'actual_weight_cal', 'weight_percentage', 'bom_gm']
             for k in keys_to_remove:
                 detail_dict.pop(k, None)
 
-            # Nếu thiếu material_id (do import excel), gán tạm = 1 (hoặc xử lý logic tìm material ở đây)
             if 'material_id' not in detail_dict or detail_dict['material_id'] is None:
                 detail_dict['material_id'] = 1 
 
             # Tạo Object BOMDetail
             detail_obj = BOMDetail(
-                **detail_dict, # Bung các trường còn lại (threads, yarn_type_name, component_type...)
-                
-                # Gán các giá trị đã tính toán chính xác
+                **detail_dict,
                 yarn_dtex=item["yarn_dtex"],
                 weight_per_yarn_gm=round(item["weight_per_yarn_gm"], 4),
                 actual_weight_cal=round(item["actual_weight_cal"], 4),
@@ -95,16 +94,28 @@ class BOMService:
 
     @staticmethod
     def create_bom(db: Session, bom_in: BOMHeaderCreate):
-        # 1. Kiểm tra sản phẩm
+        # 1. Kiểm tra sản phẩm tồn tại
         product = db.query(Product).filter(Product.product_id == bom_in.product_id).first()
         if not product:
             raise HTTPException(status_code=404, detail=f"Product ID {bom_in.product_id} not found")
 
-        # 2. Tạo Header
+        # 2. [MỚI] Kiểm tra trùng lặp (Product + Year)
+        existing_bom = db.query(BOMHeader).filter(
+            BOMHeader.product_id == bom_in.product_id,
+            BOMHeader.applicable_year == bom_in.applicable_year
+        ).first()
+
+        if existing_bom:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"BOM for Product {product.item_code} in Year {bom_in.applicable_year} already exists."
+            )
+
+        # 3. Tạo Header (Bỏ bom_code/name, thêm applicable_year)
         db_header = BOMHeader(
             product_id=bom_in.product_id,
-            bom_code=bom_in.bom_code,
-            bom_name=bom_in.bom_name,
+            applicable_year=bom_in.applicable_year, # <--- Trường mới
+            
             target_weight_gm=bom_in.target_weight_gm,
             total_scrap_rate=bom_in.total_scrap_rate,
             total_shrinkage_rate=bom_in.total_shrinkage_rate,
@@ -112,11 +123,10 @@ class BOMService:
             picks=bom_in.picks
         )
         
-        # 3. Tính toán và gắn Details
-        # Lưu ý: Pass db_header vào để lấy scrap/shrinkage rate
+        # 4. Tính toán và gắn Details
         db_header.bom_details = BOMService._execute_bom_calculations(db_header, bom_in.details)
         
-        # 4. Lưu DB
+        # 5. Lưu DB
         db.add(db_header)
         db.commit()
         db.refresh(db_header)
@@ -128,14 +138,27 @@ class BOMService:
         if not db_bom:
             raise HTTPException(status_code=404, detail="BOM not found")
 
-        # 1. Cập nhật Header
+        # 1. [MỚI] Validate Unique Year nếu có thay đổi năm
+        if bom_update.applicable_year is not None and bom_update.applicable_year != db_bom.applicable_year:
+            conflict_bom = db.query(BOMHeader).filter(
+                BOMHeader.product_id == db_bom.product_id,
+                BOMHeader.applicable_year == bom_update.applicable_year
+            ).first()
+            
+            if conflict_bom:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Cannot update to Year {bom_update.applicable_year}. BOM for this year already exists."
+                )
+
+        # 2. Cập nhật Header
         update_data = bom_update.model_dump(exclude_unset=True)
-        details_data = update_data.pop('details', None) # Tách details ra xử lý riêng
+        details_data = update_data.pop('details', None) 
 
         for key, value in update_data.items():
             setattr(db_bom, key, value)
 
-        # 2. Xử lý Details (Nếu có gửi kèm)
+        # 3. Xử lý Details (Nếu có gửi kèm)
         if details_data is not None:
             # Xóa sạch chi tiết cũ
             db.query(BOMDetail).filter(BOMDetail.bom_id == bom_id).delete()
@@ -143,7 +166,7 @@ class BOMService:
             # Tính toán lại chi tiết mới dựa trên Header ĐÃ CẬP NHẬT
             new_details = BOMService._execute_bom_calculations(db_bom, bom_update.details)
             
-            # Gán vào header (SQLAlchemy sẽ tự lo việc Insert)
+            # Gán vào header
             db_bom.bom_details = new_details
 
         db.commit()
@@ -160,14 +183,20 @@ class BOMService:
         return False
 
     @staticmethod
-    def search_boms(db: Session, product_code: str = None, bom_code: str = None, is_active: bool = None):
+    def search_boms(db: Session, product_code: str = None, year: int = None, is_active: bool = None):
+        """
+        Tìm kiếm BOM theo Product Code và Năm (Thay vì bom_code)
+        """
         query = db.query(BOMHeader).join(Product)
 
+        # Filter theo Product Code
         if product_code:
-            query = query.filter(Product.item_code.ilike(f"%{product_code}%")) # Lưu ý: Model Product dùng item_code hay product_code? Kiểm tra lại Model Product
+            # Giả sử trường code trong Product là item_code
+            query = query.filter(Product.item_code.ilike(f"%{product_code}%")) 
         
-        if bom_code:
-            query = query.filter(BOMHeader.bom_code.ilike(f"%{bom_code}%"))
+        # Filter theo Năm (Exact match)
+        if year:
+            query = query.filter(BOMHeader.applicable_year == year)
             
         if is_active is not None:
             query = query.filter(BOMHeader.is_active == is_active)

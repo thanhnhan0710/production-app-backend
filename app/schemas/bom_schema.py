@@ -5,25 +5,25 @@ from app.models.bom_detail import BOMComponentType
 
 # ==========================================
 # 1. SCHEMAS CHO BOM DETAIL (CHI TIẾT SỢI)
+# (Giữ nguyên logic cũ, chỉ đảm bảo tương thích)
 # ==========================================
 
 class BOMDetailBase(BaseModel):
     component_type: BOMComponentType
-    # Mặc định = 1 để tránh lỗi validation nếu FE chưa gửi, logic Service sẽ xử lý sau
+    # Mặc định = 1 để tránh lỗi validation nếu FE chưa gửi
     material_id: Optional[int] = 1 
     
     threads: int = 0
     yarn_type_name: str  # VD: "03300-PES-WEISS"
     twisted: float = 1.0
-    crossweave_rate: float = 0.0  # Đơn vị: 0.04 thay vì 4%
+    crossweave_rate: float = 0.0 
     actual_length_cm: float = 0.0
 
-    # Tự động tách dtex từ yarn_type_name (Logic hiển thị & tính toán sơ bộ)
+    # Tự động tách dtex từ yarn_type_name
     @computed_field
     @property
     def yarn_dtex(self) -> float:
         try:
-            # Lấy 5 ký tự đầu và đổi sang số
             if not self.yarn_type_name or len(self.yarn_type_name) < 5:
                 return 0.0
             return float(self.yarn_type_name[:5])
@@ -55,8 +55,10 @@ class BOMDetailRead(BOMDetailBase):
 class BOMHeaderCreate(BaseModel):
     """Schema input khi tạo BOM mới"""
     product_id: int
-    bom_code: str
-    bom_name: Optional[str] = None
+    
+    # [THAY ĐỔI] Thêm năm áp dụng, bỏ bom_code/bom_name
+    applicable_year: int = Field(..., description="Năm áp dụng (VD: 2026)")
+    
     target_weight_gm: float
     
     # Các tỷ lệ hao hụt chung
@@ -72,7 +74,9 @@ class BOMHeaderCreate(BaseModel):
 
 class BOMHeaderUpdate(BaseModel):
     """Schema input khi cập nhật BOM"""
-    bom_name: Optional[str] = None
+    # [THAY ĐỔI] Cho phép sửa năm nếu nhập sai (cần validate unique ở service)
+    applicable_year: Optional[int] = None 
+    
     target_weight_gm: Optional[float] = None
     total_scrap_rate: Optional[float] = None
     total_shrinkage_rate: Optional[float] = None
@@ -81,18 +85,18 @@ class BOMHeaderUpdate(BaseModel):
     width_behind_loom: Optional[float] = None
     picks: Optional[int] = None
     
-    # Khi update, thường gửi lại toàn bộ danh sách sợi để tính toán lại từ đầu
+    # Khi update, gửi lại list details để thay thế hoặc update
     details: Optional[List[BOMDetailCreate]] = None
 
 class BOMHeaderResponse(BaseModel):
     """
     Schema output trả về cho Client (API Response).
-    Khắc phục lỗi ImportError: cannot import name 'BOMHeaderResponse'
     """
     bom_id: int
     product_id: int
-    bom_code: str
-    bom_name: Optional[str] = None
+    
+    # [THAY ĐỔI] Trả về năm thay vì code/name
+    applicable_year: int
     
     target_weight_gm: float
     total_scrap_rate: float
@@ -108,6 +112,11 @@ class BOMHeaderResponse(BaseModel):
 
     # Relationship: Trả về kèm danh sách chi tiết
     bom_details: List[BOMDetailRead] = []
+
+    # [TIỆN ÍCH] Tạo tên hiển thị tự động cho Frontend
+    @computed_field
+    def display_name(self) -> str:
+        return f"BOM Năm {self.applicable_year}"
 
     class Config:
         from_attributes = True

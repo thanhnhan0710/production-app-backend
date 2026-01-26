@@ -1,9 +1,10 @@
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.db.session import get_db
 from app.models.bom_header import BOMHeader
+
 from app.schemas.bom_schema import (
     BOMHeaderCreate,
     BOMHeaderUpdate,
@@ -20,17 +21,17 @@ router = APIRouter()
 def read_boms(
     db: Session = Depends(get_db),
     product_code: Optional[str] = Query(None, description="Tìm theo mã sản phẩm (Item Code)"),
-    bom_code: Optional[str] = Query(None, description="Tìm theo mã BOM"),
+    year: Optional[int] = Query(None, description="Tìm theo năm áp dụng (VD: 2026)"), # [THAY ĐỔI] Thay bom_code bằng year
     is_active: Optional[bool] = Query(None, description="Lọc theo trạng thái kích hoạt"),
 ) -> Any:
     """
     Lấy danh sách BOM Yarn.
-    Hỗ trợ tìm kiếm theo Mã sản phẩm (product_code) hoặc Mã BOM.
+    Hỗ trợ tìm kiếm theo Mã sản phẩm (product_code) và Năm (year).
     """
     boms = BOMService.search_boms(
         db=db, 
         product_code=product_code, 
-        bom_code=bom_code, 
+        year=year, 
         is_active=is_active
     )
     return boms
@@ -44,18 +45,18 @@ def create_bom(
     db: Session = Depends(get_db)
 ) -> Any:
     """
-    Tạo mới một BOM Yarn.
+    Tạo mới một BOM Yarn cho một Năm cụ thể.
     
-    - Hệ thống sẽ **tự động tính toán** trọng lượng sợi, định mức (g/m) 
-      dựa trên số lượng sợi (threads) và loại sợi (yarn_type_name) được gửi lên.
-    - Input: Danh sách chi tiết sợi.
-    - Output: BOM hoàn chỉnh với các con số đã được tính toán.
+    - Hệ thống sẽ kiểm tra xem Product + Year đã tồn tại chưa.
+    - Hệ thống tự động tính toán trọng lượng sợi và định mức (g/m).
     """
     try:
         new_bom = BOMService.create_bom(db=db, bom_in=bom_in)
         return new_bom
+    except HTTPException as e:
+        raise e
     except Exception as e:
-        # Bắt các lỗi logic từ Service (ví dụ: Không tìm thấy sản phẩm)
+        # Bắt các lỗi không mong muốn khác
         raise HTTPException(status_code=400, detail=str(e))
 
 # -------------------------------------------------------------------
@@ -69,7 +70,12 @@ def read_bom_by_id(
     """
     Xem chi tiết cấu trúc của một BOM cụ thể.
     """
-    bom = db.query(BOMHeader).filter(BOMHeader.bom_id == bom_id).first()
+    # [QUAN TRỌNG] Thêm joinedload để lấy luôn danh sách bom_details
+    bom = db.query(BOMHeader)\
+        .options(joinedload(BOMHeader.bom_details))\
+        .filter(BOMHeader.bom_id == bom_id)\
+        .first()
+        
     if not bom:
         raise HTTPException(status_code=404, detail="BOM not found")
     return bom
@@ -86,10 +92,8 @@ def update_bom(
     """
     Cập nhật thông tin BOM.
     
-    LƯU Ý: Nếu gửi kèm danh sách `details` mới, hệ thống sẽ:
-    1. Xóa toàn bộ chi tiết cũ của BOM này.
-    2. Tính toán lại định mức cho danh sách chi tiết mới.
-    3. Lưu lại vào DB.
+    - Nếu thay đổi `applicable_year`, hệ thống sẽ check trùng lặp.
+    - Nếu gửi kèm `details`, hệ thống sẽ tính toán lại toàn bộ định mức.
     """
     try:
         updated_bom = BOMService.update_bom(db=db, bom_id=bom_id, bom_update=bom_in)
