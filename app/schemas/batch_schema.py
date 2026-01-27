@@ -1,13 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional
 from datetime import date, datetime
-from enum import Enum
-
-class BatchQCStatus(str, Enum):
-    PENDING = "Pending"
-    PASS = "Pass"
-    FAIL = "Fail"
-    EXPIRED = "Expired"
+from app.models.batch import BatchQCStatus
 
 class BatchBase(BaseModel):
     supplier_batch_no: str
@@ -15,6 +9,10 @@ class BatchBase(BaseModel):
     manufacture_date: Optional[date] = None
     expiry_date: Optional[date] = None
     origin_country: Optional[str] = None
+    
+    # [YÊU CẦU] Bổ sung location
+    location: Optional[str] = None 
+    
     qc_status: Optional[BatchQCStatus] = BatchQCStatus.PENDING
     qc_note: Optional[str] = None
     note: Optional[str] = None
@@ -29,6 +27,10 @@ class BatchUpdate(BaseModel):
     manufacture_date: Optional[date] = None
     expiry_date: Optional[date] = None
     origin_country: Optional[str] = None
+    
+    # [YÊU CẦU] Cho phép update location
+    location: Optional[str] = None 
+    
     qc_status: Optional[BatchQCStatus] = None
     qc_note: Optional[str] = None
     note: Optional[str] = None

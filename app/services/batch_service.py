@@ -25,7 +25,8 @@ class BatchService:
         search: str = None,
         material_id: int = None,
         qc_status: BatchQCStatus = None,
-        supplier_batch: str = None
+        supplier_batch: str = None,
+        location: str = None # [UPDATED] Thêm tham số lọc theo vị trí
     ) -> List[Batch]:
         """
         Tìm kiếm nâng cao Lô:
@@ -33,6 +34,7 @@ class BatchService:
         - supplier_batch: Mã lô NCC
         - material_id: Lọc theo vật tư
         - qc_status: Lọc trạng thái
+        - location: Lọc theo vị trí kho
         """
         query = self.db.query(Batch)
 
@@ -45,13 +47,17 @@ class BatchService:
         if supplier_batch:
             query = query.filter(Batch.supplier_batch_no.ilike(f"%{supplier_batch}%"))
 
+        # [UPDATED] Lọc theo vị trí chính xác
+        if location:
+            query = query.filter(Batch.location == location)
+
         if search:
             query = query.filter(Batch.internal_batch_code.ilike(f"%{search}%"))
 
         # Sắp xếp mới nhất lên đầu
         return query.order_by(desc(Batch.created_at)).offset(skip).limit(limit).all()
 
-    # [UPDATED] Hàm sinh mã lô nội bộ tự động: V[YY]0001 (VD: V260001)
+    # Hàm sinh mã lô nội bộ tự động: V[YY]0001 (VD: V260001)
     def generate_next_batch_code(self) -> str:
         # 1. Lấy 2 số cuối của năm hiện tại (VD: 2026 -> "26")
         current_year = datetime.now().strftime("%y")
@@ -89,7 +95,6 @@ class BatchService:
         # 1. Sinh mã lô nội bộ nếu chưa có
         internal_code = obj_in.internal_batch_code
         if not internal_code:
-            # [UPDATED] Sử dụng logic sinh mã V260001
             internal_code = self.generate_next_batch_code()
 
         # 2. Kiểm tra trùng mã nội bộ (Double check)
@@ -107,6 +112,9 @@ class BatchService:
             expiry_date=obj_in.expiry_date,
             origin_country=obj_in.origin_country,
             
+            # [UPDATED] Thêm location vào quá trình tạo
+            location=obj_in.location,
+
             receipt_detail_id=obj_in.receipt_detail_id,
             
             qc_status=obj_in.qc_status,
@@ -121,6 +129,10 @@ class BatchService:
         return db_obj
 
     def update(self, db_obj: Batch, obj_in: BatchUpdate) -> Batch:
+        # Note: Hàm này sử dụng cơ chế dynamic attribute setting
+        # Vì BatchUpdate schema đã có trường 'location', nên obj_in.dict() sẽ tự động chứa nó
+        # và vòng lặp for bên dưới sẽ tự động update location vào db_obj.
+        # Không cần sửa code ở đây.
         update_data = obj_in.dict(exclude_unset=True)
         
         for field, value in update_data.items():

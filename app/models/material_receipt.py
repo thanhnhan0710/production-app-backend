@@ -57,8 +57,11 @@ class MaterialReceiptDetail(Base):
 
     supplier_batch_no = Column(String(100), nullable=True)
     
-    # [MỚI] Nguồn gốc xuất xứ (để đồng bộ sang Batch)
+    # Nguồn gốc xuất xứ (để đồng bộ sang Batch)
     origin_country = Column(String(50), nullable=True)
+
+    # [MỚI] Thêm cột Location (Vị trí kho) - Max 20 ký tự cho thoải mái (dù yêu cầu Batch là 10)
+    location = Column(String(20), nullable=True, comment="Vị trí kho chi tiết (Bin Code)")
 
     note = Column(String(200), nullable=True)
 

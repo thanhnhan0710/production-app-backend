@@ -1,8 +1,14 @@
 import enum
+from typing import TYPE_CHECKING, Optional, cast
+
 from sqlalchemy import Column, Integer, String, Date, ForeignKey, Enum, Boolean, DateTime, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.base_class import Base
+
+# [FIX 1] Import cast từ typing
+if TYPE_CHECKING:
+    from app.models.material_receipt import MaterialReceiptDetail, MaterialReceipt
 
 class BatchQCStatus(str, enum.Enum):
     PENDING = "Pending"
@@ -22,6 +28,9 @@ class Batch(Base):
     expiry_date = Column(Date, nullable=True)      
     origin_country = Column(String(50), nullable=True) 
     
+    # [YÊU CẦU 2] Thêm vị trí kho (Max 10 ký tự)
+    location = Column(String(10), nullable=True, comment="Vị trí kho/Bin code")
+
     # Liên kết khóa ngoại
     receipt_detail_id = Column(Integer, ForeignKey("material_receipt_details.detail_id"), nullable=True)
     
@@ -36,11 +45,31 @@ class Batch(Base):
 
     # Relationships
     material = relationship("Material")
-    receipt_detail = relationship("MaterialReceiptDetail", lazy="joined") # lazy="joined" để load luôn khi query
+    
+    # [FIX 2] Khai báo relationship bình thường
+    # Lưu ý: Việc tách if TYPE_CHECKING riêng cho biến receipt_detail đôi khi làm Pylance bị rối 
+    # trong context của SQLAlchemy model. Ta sẽ xử lý bằng cast bên dưới.
+    receipt_detail = relationship("MaterialReceiptDetail", lazy="joined")
 
-    # [MỚI] Property ảo để lấy Số phiếu nhập
+    # [YÊU CẦU 1] Property ảo lấy số phiếu nhập
     @property
-    def receipt_number(self):
-        if self.receipt_detail and self.receipt_detail.header:
+    def receipt_number(self) -> Optional[str]:
+        # 1. Kiểm tra detail có tồn tại không
+        if not self.receipt_detail:
+            return None
+        
+        # [FIX 3] Ép kiểu tường minh (Explicit Casting)
+        # Chỉ chạy khi TYPE_CHECKING để không ảnh hưởng hiệu năng runtime
+        # Giúp IDE biết chính xác 'detail' và 'header' là class nào
+        if TYPE_CHECKING:
+            detail = cast("MaterialReceiptDetail", self.receipt_detail)
+            if detail.header:
+                header = cast("MaterialReceipt", detail.header)
+                return header.receipt_number
+        
+        # Logic chạy thực tế (Runtime)
+        # Vì Python là dynamic type nên đoạn này vẫn chạy tốt dù IDE không gợi ý
+        try:
             return self.receipt_detail.header.receipt_number
-        return None
+        except AttributeError:
+            return None

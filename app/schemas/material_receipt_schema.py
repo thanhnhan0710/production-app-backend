@@ -24,8 +24,11 @@ class MaterialReceiptDetailBase(BaseModel):
     number_of_pallets: int = Field(default=0, description="Tổng số Pallet/Kiện")
     supplier_batch_no: Optional[str] = None 
     
-    # [MỚI] Trường xuất xứ
+    # Trường xuất xứ
     origin_country: Optional[str] = None
+    
+    # [MỚI] Thêm location vào Base để Create/Response đều nhận được
+    location: Optional[str] = None 
     
     note: Optional[str] = None
 
@@ -40,7 +43,11 @@ class MaterialReceiptDetailUpdate(BaseModel):
     received_quantity_cones: Optional[int] = None
     number_of_pallets: Optional[int] = None
     supplier_batch_no: Optional[str] = None
-    origin_country: Optional[str] = None # [MỚI]
+    origin_country: Optional[str] = None
+    
+    # [MỚI] Cho phép update location
+    location: Optional[str] = None 
+    
     note: Optional[str] = None
 
 class MaterialReceiptDetailResponse(MaterialReceiptDetailBase):

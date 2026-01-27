@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		},
+		{
+			"path": "../../../production_app_frontend"
+		}
+	],
+	"settings": {}
+}
