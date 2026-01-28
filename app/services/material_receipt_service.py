@@ -1,14 +1,14 @@
-from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, desc
 from fastapi import HTTPException
 from typing import List, Optional
+from datetime import datetime
 
 # Models
 from app.models.material_receipt import MaterialReceipt, MaterialReceiptDetail
 from app.models.purchase_order import PurchaseOrderDetail, POStatus, PurchaseOrderHeader
 from app.models.batch import Batch, BatchQCStatus
-from app.models.inventory import InventoryStock # Import để type hinting nếu cần
+from app.models.inventory import InventoryStock
 
 # Schemas
 from app.schemas.material_receipt_schema import (
@@ -19,15 +19,12 @@ from app.schemas.material_receipt_schema import (
     MaterialReceiptFilter
 )
 from app.schemas.batch_schema import BatchCreate
-
-# Services
 from app.services.batch_service import BatchService
 from app.services.inventory_service import InventoryService
 
 class MaterialReceiptService:
     def __init__(self, db: Session):
         self.db = db
-        # Khởi tạo các service con để tái sử dụng logic
         self.batch_service = BatchService(db)
         self.inventory_service = InventoryService(db)
 
@@ -66,11 +63,9 @@ class MaterialReceiptService:
         return query.order_by(desc(MaterialReceipt.receipt_date)).offset(skip).limit(limit).all()
 
     def create(self, obj_in: MaterialReceiptCreate) -> MaterialReceipt:
-        # 1. Validate
         if self.get_by_number(obj_in.receipt_number):
             raise HTTPException(status_code=400, detail=f"Mã phiếu nhập {obj_in.receipt_number} đã tồn tại.")
 
-        # 2. Tạo Header
         db_header = MaterialReceipt(
             receipt_number=obj_in.receipt_number,
             receipt_date=obj_in.receipt_date,
@@ -83,20 +78,13 @@ class MaterialReceiptService:
             created_by=obj_in.created_by
         )
         self.db.add(db_header)
-        self.db.flush() # Lấy receipt_id
+        self.db.flush() 
 
-        # 3. Tạo Details + Batch + Inventory (Tích hợp chặt chẽ)
         if obj_in.details:
             for detail_in in obj_in.details:
-                # A. Tạo Detail & Update PO
                 new_detail = self._create_detail_instance(db_header.receipt_id, detail_in, db_header.po_header_id)
-                self.db.flush() # Lấy detail_id
-
-                # B. Tạo Batch (Auto Link) - Hàm này trả về Batch object
+                self.db.flush() 
                 batch = self._sync_batch_for_detail(new_detail)
-                
-                # C. [OPTIMIZED] Tăng Tồn Kho ngay lập tức
-                # Lưu ý: Dùng warehouse_id từ Header
                 if batch:
                     self.inventory_service.increase_stock(
                         material_id=new_detail.material_id,
@@ -105,7 +93,6 @@ class MaterialReceiptService:
                         quantity=new_detail.received_quantity_kg
                     )
 
-        # 4. Check đóng PO
         if obj_in.po_header_id:
             self._check_and_close_po(obj_in.po_header_id)
 
@@ -118,23 +105,14 @@ class MaterialReceiptService:
         if not db_obj:
             raise HTTPException(status_code=404, detail="Phiếu nhập không tồn tại.")
 
-        # Check nếu đổi warehouse_id (Rất nguy hiểm, cần xử lý chuyển kho)
-        # Ở đây ta giả định không cho đổi kho khi đã nhập, hoặc update đơn giản thông tin text
-        old_warehouse_id = db_obj.warehouse_id
-
         update_data = obj_in.dict(exclude_unset=True)
         for field, value in update_data.items():
             setattr(db_obj, field, value)
         
         self.db.add(db_obj)
         self.db.flush()
-
-        # Nếu warehouse thay đổi, logic inventory sẽ rất phức tạp (Trừ kho cũ, cộng kho mới).
-        # Để an toàn, nếu warehouse thay đổi, ta chặn hoặc phải implement logic move stock.
-        if obj_in.warehouse_id and obj_in.warehouse_id != old_warehouse_id:
-             raise HTTPException(status_code=400, detail="Không được phép đổi Kho của phiếu nhập đã tạo. Hãy tạo phiếu điều chuyển.")
-
-        # Đồng bộ lại thông tin Batch (nếu cần)
+        
+        # Đồng bộ lại Batch nếu cần
         for detail in db_obj.details:
             self._sync_batch_for_detail(detail)
 
@@ -148,44 +126,35 @@ class MaterialReceiptService:
             raise HTTPException(status_code=404, detail="Phiếu nhập không tồn tại.")
         
         receipt: MaterialReceipt = db_obj
-        warehouse_id = receipt.warehouse_id
 
-        # Loop qua từng detail để hoàn tác (Revert)
-        detail: MaterialReceiptDetail 
-        for detail in receipt.details:
-            # 1. Revert PO
-            if receipt.po_header_id:
-                self._update_po_received_quantity(
-                    po_id=receipt.po_header_id,
-                    material_id=detail.material_id, 
-                    quantity_delta_kg= -detail.received_quantity_kg 
-                )
-            
-            # 2. Revert Inventory (Trừ kho)
-            batch = self.db.query(Batch).filter(Batch.receipt_detail_id == detail.detail_id).first()
-            if batch:
-                # Tăng số âm = Trừ kho
-                self.inventory_service.increase_stock(
-                    material_id=detail.material_id,
-                    warehouse_id=warehouse_id,
-                    batch_id=batch.batch_id,
-                    quantity= -detail.received_quantity_kg 
-                )
+        # Duyệt qua từng chi tiết để dọn dẹp dữ liệu liên quan
+        if receipt.details:
+            for detail in receipt.details:
+                # 1. Revert PO Quantity (Trả lại số lượng cho đơn mua hàng)
+                if receipt.po_header_id:
+                    self._update_po_received_quantity(
+                        po_id=receipt.po_header_id,
+                        material_id=detail.material_id, 
+                        quantity_delta_kg= -detail.received_quantity_kg 
+                    )
                 
-                # 3. Xóa Batch (Nếu tồn kho đã về 0 và chưa dùng)
-                # Logic xóa batch an toàn: check xem stock có > 0 hay ko
-                # Nhưng ở đây ta cứ để database lo việc cascade hoặc giữ lại batch rỗng
-                try:
+                # 2. Xóa InventoryStock & Batch
+                batch = self.db.query(Batch).filter(Batch.receipt_detail_id == detail.detail_id).first()
+                if batch:
+                    stock = self.db.query(InventoryStock).filter(InventoryStock.batch_id == batch.batch_id).first()
+                    if stock:
+                        self.db.delete(stock)
                     self.db.delete(batch)
-                except:
-                    pass
 
+        # 3. Cập nhật trạng thái PO
         if receipt.po_header_id:
             self._check_and_close_po(receipt.po_header_id)
 
+        # 4. Xóa phiếu nhập
         self.db.delete(receipt)
+        
         self.db.commit()
-        return {"message": "Đã xóa phiếu nhập, hoàn trả PO và trừ tồn kho."}
+        return {"message": "Đã xóa phiếu nhập, cập nhật lại PO và xóa tồn kho liên quan."}
 
     # =========================================================================
     # QUẢN LÝ CHI TIẾT (DETAIL)
@@ -201,14 +170,14 @@ class MaterialReceiptService:
         
         receipt: MaterialReceipt = receipt_obj
 
-        # 1. Tạo Detail & Update PO
+        # 1. Tạo Detail
         new_detail = self._create_detail_instance(receipt.receipt_id, detail_in, receipt.po_header_id)
         self.db.flush()
 
         # 2. Tạo Batch
         batch = self._sync_batch_for_detail(new_detail)
 
-        # 3. [OPTIMIZED] Tăng Inventory
+        # 3. Tăng Inventory
         if batch:
             self.inventory_service.increase_stock(
                 material_id=new_detail.material_id,
@@ -217,7 +186,6 @@ class MaterialReceiptService:
                 quantity=new_detail.received_quantity_kg
             )
         
-        # 4. Check PO
         if receipt.po_header_id:
              self._check_and_close_po(receipt.po_header_id)
 
@@ -233,19 +201,25 @@ class MaterialReceiptService:
         receipt_obj = db_detail.header 
         receipt: MaterialReceipt = receipt_obj
         
-        # 1. Tính delta (chênh lệch) số lượng
+        # 1. Tính delta
         qty_delta = 0.0
         if obj_in.received_quantity_kg is not None:
             qty_delta = obj_in.received_quantity_kg - db_detail.received_quantity_kg
 
-        # 2. Update DB Detail
+        # 2. Update DB
         update_data = obj_in.dict(exclude_unset=True)
         for field, value in update_data.items():
             setattr(db_detail, field, value)
+        
+        # [FIX] Gán lại location/origin_country vào object db_detail (nếu có trong input)
+        # để hàm _sync_batch_for_detail có thể đọc được
+        if hasattr(obj_in, 'location'): db_detail.location = obj_in.location
+        if hasattr(obj_in, 'origin_country'): db_detail.origin_country = obj_in.origin_country
+
         self.db.add(db_detail)
         self.db.flush()
 
-        # 3. Update PO (nếu có delta)
+        # 3. Update PO
         if receipt.po_header_id and qty_delta != 0:
             self._update_po_received_quantity(
                 po_id=receipt.po_header_id,
@@ -254,15 +228,14 @@ class MaterialReceiptService:
             )
             self._check_and_close_po(receipt.po_header_id)
 
-        # 4. [OPTIMIZED] Update Inventory (nếu có delta)
-        # Lấy batch liên quan
-        batch = self._sync_batch_for_detail(db_detail) # Sync lại phòng khi user sửa thông tin lô
+        # 4. Update Inventory & Batch
+        batch = self._sync_batch_for_detail(db_detail)
         if batch and qty_delta != 0:
             self.inventory_service.increase_stock(
                 material_id=db_detail.material_id,
                 warehouse_id=receipt.warehouse_id,
                 batch_id=batch.batch_id,
-                quantity=qty_delta # Cộng thêm phần chênh lệch (nếu âm thì trừ đi)
+                quantity=qty_delta 
             )
 
         self.db.commit()
@@ -277,17 +250,13 @@ class MaterialReceiptService:
         receipt_obj = db_detail.header
         receipt: MaterialReceipt = receipt_obj
         
-        # Lấy batch trước khi xóa detail
         batch = self.db.query(Batch).filter(Batch.receipt_detail_id == detail_id).first()
 
-        # 1. Revert Inventory
+        # 1. Xóa InventoryStock trước
         if batch:
-            self.inventory_service.increase_stock(
-                material_id=db_detail.material_id,
-                warehouse_id=receipt.warehouse_id,
-                batch_id=batch.batch_id,
-                quantity= -db_detail.received_quantity_kg # Trừ kho
-            )
+            stock = self.db.query(InventoryStock).filter(InventoryStock.batch_id == batch.batch_id).first()
+            if stock:
+                self.db.delete(stock)
 
         # 2. Revert PO
         if receipt.po_header_id:
@@ -300,22 +269,19 @@ class MaterialReceiptService:
 
         # 3. Xóa Batch
         if batch:
-            try:
-                self.db.delete(batch)
-            except:
-                batch.is_active = False # Soft delete nếu ko xóa cứng được
-                self.db.add(batch)
+            self.db.delete(batch)
 
+        # 4. Xóa Detail
         self.db.delete(db_detail)
+        
         self.db.commit()
-        return {"message": "Đã xóa chi tiết, cập nhật PO và trừ tồn kho."}
+        return {"message": "Đã xóa chi tiết và cập nhật kho."}
 
     # =========================================================================
     # INTERNAL HELPERS
     # =========================================================================
 
     def _create_detail_instance(self, receipt_id: int, detail_in: MaterialReceiptDetailCreate, po_id: Optional[int]):
-        # Tạo object nhưng chưa commit để dùng session chung
         db_detail = MaterialReceiptDetail(
             receipt_id=receipt_id,
             material_id=detail_in.material_id,
@@ -328,9 +294,14 @@ class MaterialReceiptService:
             note=detail_in.note
         )
         
-        # Nếu có location trong schema (tùy chỉnh thêm)
-        if hasattr(detail_in, 'location') and hasattr(db_detail, 'location'):
-             setattr(db_detail, 'location', getattr(detail_in, 'location'))
+        # [FIX QUAN TRỌNG] Gán thuộc tính Location và Origin vào object Python (Transient)
+        # Dù bảng MaterialReceiptDetail trong DB không có cột này, 
+        # nhưng ta cần gán vào object để truyền sang hàm _sync_batch_for_detail
+        if hasattr(detail_in, 'location'):
+             db_detail.location = detail_in.location
+        
+        if hasattr(detail_in, 'origin_country'):
+             db_detail.origin_country = detail_in.origin_country
 
         self.db.add(db_detail)
 
@@ -343,46 +314,52 @@ class MaterialReceiptService:
         return db_detail
 
     def _sync_batch_for_detail(self, detail: MaterialReceiptDetail) -> Optional[Batch]:
-        """
-        Tạo hoặc cập nhật Batch dựa trên Receipt Detail.
-        Trả về Batch Object để dùng cho Inventory.
-        """
+        """Tạo/Update Batch và trả về object"""
         supplier_batch = detail.supplier_batch_no if detail.supplier_batch_no else f"NO-BATCH-{detail.detail_id}"
         
-        # Lấy location từ detail (nếu có, để lưu vào Batch phục vụ tìm kiếm)
+        # [FIX] Lấy thông tin an toàn bằng getattr để tránh lỗi nếu object không có thuộc tính
         current_location = getattr(detail, 'location', None)
-
+        current_origin = getattr(detail, 'origin_country', None)
+        
         existing_batch = self.db.query(Batch).filter(
             Batch.receipt_detail_id == detail.detail_id
         ).first()
 
         if existing_batch:
-            # Update nếu thông tin thay đổi
+            is_changed = False
             if existing_batch.supplier_batch_no != supplier_batch:
                 existing_batch.supplier_batch_no = supplier_batch
+                is_changed = True
             
             if existing_batch.material_id != detail.material_id:
                 existing_batch.material_id = detail.material_id
+                is_changed = True
             
-            if hasattr(detail, 'origin_country') and existing_batch.origin_country != detail.origin_country:
-                existing_batch.origin_country = detail.origin_country
+            # Update Origin & Location nếu có giá trị mới
+            if current_origin is not None and existing_batch.origin_country != current_origin:
+                existing_batch.origin_country = current_origin
+                is_changed = True
 
-            self.db.add(existing_batch)
+            if current_location is not None and existing_batch.location != current_location:
+                existing_batch.location = current_location
+                is_changed = True
+
+            if is_changed:
+                self.db.add(existing_batch)
+            
             return existing_batch
         else:
             # Create New Batch
             batch_in = BatchCreate(
                 supplier_batch_no=supplier_batch,
                 material_id=detail.material_id,
-                qc_status=BatchQCStatus.PENDING, # Mặc định là Pending chờ QC
+                qc_status=BatchQCStatus.PENDING,
                 is_active=True,
                 receipt_detail_id=detail.detail_id,
-                # Truyền thêm origin_country từ detail nếu có
-                origin_country=getattr(detail, 'origin_country', None),
-                # Truyền location nếu batch schema hỗ trợ
+                # Truyền đúng thông tin location và origin
+                origin_country=current_origin,
                 location=current_location 
             )
-            # Sử dụng BatchService để tạo (để tận dụng logic sinh mã nội bộ)
             return self.batch_service.create(batch_in)
 
     def _update_po_received_quantity(self, po_id: int, material_id: int, quantity_delta_kg: float):
@@ -391,8 +368,7 @@ class MaterialReceiptService:
             PurchaseOrderDetail.material_id == material_id
         ).all()
 
-        if not po_details:
-            return
+        if not po_details: return
 
         target_detail: PurchaseOrderDetail = po_details[0]
         current = target_detail.received_quantity or 0.0
@@ -402,12 +378,11 @@ class MaterialReceiptService:
 
     def _check_and_close_po(self, po_id: int):
         po_header = self.db.query(PurchaseOrderHeader).filter(PurchaseOrderHeader.po_id == po_id).first()
-        if not po_header:
-            return
+        if not po_header: return
 
         all_received = True
         has_received_any = False
-
+        
         detail: PurchaseOrderDetail
         for detail in po_header.details:
             ordered = detail.quantity or 0.0
@@ -425,3 +400,23 @@ class MaterialReceiptService:
                 po_header.status = POStatus.CONFIRMED 
         
         self.db.add(po_header)
+
+    def generate_next_receipt_number(self) -> str:
+        now = datetime.now()
+        prefix = now.strftime("%Y/%m-") 
+        
+        last_receipt = self.db.query(MaterialReceipt.receipt_number)\
+            .filter(MaterialReceipt.receipt_number.like(f"{prefix}%"))\
+            .order_by(desc(MaterialReceipt.receipt_number))\
+            .first()
+        
+        if not last_receipt:
+            return f"{prefix}001"
+        
+        try:
+            last_number_str = last_receipt[0]
+            sequence_part = last_number_str.split('-')[-1]
+            next_sequence = int(sequence_part) + 1
+            return f"{prefix}{next_sequence:03d}"
+        except (ValueError, IndexError):
+            return f"{prefix}001"

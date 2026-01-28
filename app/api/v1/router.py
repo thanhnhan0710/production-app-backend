@@ -29,7 +29,9 @@ from app.api.v1.endpoints import (
     import_declarations,
     warehouses,
     material_receipts,
-    iqc_results
+    iqc_results,
+    inventorys,
+    material_exports
 )
 
 api_router = APIRouter()
@@ -65,4 +67,6 @@ api_router.include_router(warehouses.router, prefix="/warehouses", tags=["Wareho
 api_router.include_router(material_receipts.router, prefix="/material-receipts", tags=["Material Receipts"])
 api_router.include_router(batches.router, prefix="/batches", tags=["Batches"])
 api_router.include_router(iqc_results.router, prefix="/iqc-results", tags=["Iqc Results"])
+api_router.include_router(inventorys.router, prefix="/inventorys", tags=["Inventorys"])
+api_router.include_router(material_exports.router, prefix="/material-exports", tags=["Material Exports"])
 

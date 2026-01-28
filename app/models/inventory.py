@@ -1,3 +1,4 @@
+from typing import Optional
 from sqlalchemy import Column, Integer, Float, ForeignKey, DateTime, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -31,3 +32,34 @@ class InventoryStock(Base):
     material = relationship("Material")
     warehouse = relationship("Warehouse")
     batch = relationship("Batch")
+
+     # --- [MỚI] PROPERTY MAPPING DỮ LIỆU TỪ BẢNG LIÊN QUAN ---
+    
+    @property
+    def received_quantity_cones(self) -> int:
+        """Lấy số cuộn từ Chi tiết phiếu nhập thông qua Batch"""
+        if self.batch and self.batch.receipt_detail:
+            return self.batch.receipt_detail.received_quantity_cones or 0
+        return 0
+
+    @property
+    def number_of_pallets(self) -> int:
+        """Lấy số pallet từ Chi tiết phiếu nhập thông qua Batch"""
+        if self.batch and self.batch.receipt_detail:
+            return self.batch.receipt_detail.number_of_pallets or 0
+        return 0
+
+    @property
+    def supplier_short_name(self) -> Optional[str]:
+        """
+        Lấy tên NCC viết tắt.
+        Chain: Inventory -> Batch -> ReceiptDetail -> ReceiptHeader -> PO -> Supplier
+        """
+        try:
+            return self.batch.receipt_detail.header.po_header.vendor.short_name
+        except AttributeError:
+            # Fallback: Trả về tên đầy đủ nếu không có tên viết tắt, hoặc None nếu đứt gãy quan hệ
+            try:
+                return self.batch.receipt_detail.header.po_header.vendor.supplier_name
+            except AttributeError:
+                return None

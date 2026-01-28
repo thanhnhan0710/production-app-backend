@@ -29,4 +29,6 @@ from app.models.import_declaration import ImportDeclaration,ImportDeclarationDet
 from app.models.warehouse import Warehouse
 from app.models.material_receipt import MaterialReceipt,MaterialReceiptDetail   
 from app.models.batch import Batch     
-from app.models.iqc_result import IQCResult               
+from app.models.iqc_result import IQCResult     
+from app.models.inventory import InventoryStock    
+from app.models.material_export import MaterialExport,MaterialExportDetail        

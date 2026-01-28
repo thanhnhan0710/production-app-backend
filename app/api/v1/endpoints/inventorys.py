@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, Query
 from sqlalchemy.orm import Session
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 
 from app.api import deps
 from app.schemas.inventory_schema import (
@@ -10,6 +10,26 @@ from app.schemas.inventory_schema import (
 from app.services.inventory_service import InventoryService
 
 router = APIRouter()
+
+# --- [MỚI] 0. GET ALL INVENTORY (LIST) ---
+@router.get("/", response_model=List[InventoryStockResponse])
+def read_inventories(
+    skip: int = 0,
+    limit: int = 100,
+    search: Optional[str] = Query(None, description="Tìm theo Material Code/Name hoặc Batch No"),
+    warehouse_id: Optional[int] = Query(None, description="Lọc theo ID kho"),
+    db: Session = Depends(deps.get_db)
+):
+    """
+    Lấy danh sách tồn kho chi tiết (hỗ trợ phân trang, tìm kiếm, lọc).
+    """
+    service = InventoryService(db)
+    return service.get_multi(
+        skip=skip, 
+        limit=limit, 
+        search=search, 
+        warehouse_id=warehouse_id
+    )
 
 # --- 1. GET STOCK BY BATCH ---
 @router.get("/stock/{warehouse_id}/{batch_id}", response_model=InventoryStockResponse)
