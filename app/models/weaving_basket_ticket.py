@@ -12,11 +12,11 @@ class WeavingBasketTicket(Base):
 
     # --- Thông tin sản xuất ---
     product_id = Column(Integer, ForeignKey("products.product_id"), nullable=False)
-    standard_id = Column(Integer, ForeignKey("standards.standard_id"), nullable=False)
+    standard_id = Column(Integer, ForeignKey("standards.standard_id"), nullable=True)
     machine_id = Column(Integer, ForeignKey("machines.machine_id"), nullable=False)
     
     # Lưu ý: Cột này bạn mới thêm ở bước trước, hãy giữ lại
-    machine_line = Column(Integer, nullable=True)
+    machine_line = Column(Integer, nullable=False)
     
     # --- Thông tin sợi & Rổ ---
     yarn_load_date = Column(Date, nullable=False)        # Ngày lên sợi
@@ -25,11 +25,11 @@ class WeavingBasketTicket(Base):
     # Liên kết tới bảng 'batches' thông qua cột khóa chính 'batch_id'
     batch_id = Column(Integer, ForeignKey("batches.batch_id"), nullable=True) 
     
-    basket_id = Column(Integer, ForeignKey("baskets.basket_id"), nullable=False)  
+    basket_id = Column(Integer, ForeignKey("baskets.basket_id"), nullable=True)  
     
     # --- Quy trình Vào rổ (Start) ---
     time_in = Column(DateTime, default=datetime.datetime.now) 
-    employee_in_id = Column(Integer, ForeignKey("employees.employee_id"), nullable=False) 
+    employee_in_id = Column(Integer, ForeignKey("employees.employee_id"), nullable=True) 
     
     # --- Quy trình Ra rổ (Finish) ---
     time_out = Column(DateTime, nullable=True)           # Thời gian ra rổ

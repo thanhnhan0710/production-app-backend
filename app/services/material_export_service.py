@@ -26,6 +26,44 @@ class MaterialExportService:
         self.inventory_service = InventoryService(db)
 
     # ============================
+    # AUTO GEN CODE
+    # ============================
+    def generate_next_export_code(self) -> str:
+        """
+        Sinh mã phiếu xuất theo định dạng: YYYYMM-XXXX
+        Ví dụ: 202601-0001, 202601-0002
+        """
+        now = datetime.now()
+        # Tạo tiền tố: NămTháng (VD: 202601)
+        prefix = now.strftime("%Y%m")
+        
+        # Tìm phiếu xuất mới nhất trong tháng này
+        # SQL: SELECT export_code FROM material_exports WHERE export_code LIKE '202601-%' ORDER BY export_code DESC LIMIT 1
+        last_export = self.db.query(MaterialExport)\
+            .filter(MaterialExport.export_code.like(f"{prefix}-%"))\
+            .order_by(desc(MaterialExport.export_code))\
+            .first()
+        
+        if not last_export:
+            # Chưa có phiếu nào trong tháng -> Bắt đầu 0001
+            return f"{prefix}-0001"
+        
+        try:
+            # Lấy mã cũ: "202601-0015"
+            last_code = last_export.export_code
+            # Tách chuỗi lấy phần số đuôi
+            parts = last_code.split('-')
+            last_seq = int(parts[1]) # 15
+            
+            new_seq = last_seq + 1 # 16
+            
+            # Format lại thành 4 chữ số (0016)
+            return f"{prefix}-{new_seq:04d}"
+        except (IndexError, ValueError):
+            # Fallback nếu dữ liệu cũ sai định dạng
+            return f"{prefix}-0001"
+
+    # ============================
     # GET / SEARCH
     # ============================
     def get(self, export_id: int) -> Optional[MaterialExport]:
@@ -37,6 +75,8 @@ class MaterialExportService:
         if filter_param:
             if filter_param.warehouse_id:
                 query = query.filter(MaterialExport.warehouse_id == filter_param.warehouse_id)
+            if filter_param.exporter_id:
+                query = query.filter(MaterialExport.exporter_id == filter_param.exporter_id)
             if filter_param.receiver_id:
                 query = query.filter(MaterialExport.receiver_id == filter_param.receiver_id)
             if filter_param.from_date:
@@ -55,15 +95,25 @@ class MaterialExportService:
         return query.order_by(desc(MaterialExport.export_date)).offset(skip).limit(limit).all()
 
     # ============================
-    # CREATE (Tạo phiếu xuất & Xử lý logic kho/sản xuất)
+    # CREATE
     # ============================
     def create_export(self, obj_in: MaterialExportCreate) -> MaterialExport:
+        # [UPDATED] Tự động sinh mã nếu không có hoặc là "AUTO"
+        if not obj_in.export_code or obj_in.export_code.strip().upper() == "AUTO":
+            obj_in.export_code = self.generate_next_export_code()
+
+        # Kiểm tra trùng mã phiếu
+        existing = self.db.query(MaterialExport).filter(MaterialExport.export_code == obj_in.export_code).first()
+        if existing:
+             raise HTTPException(status_code=400, detail=f"Mã phiếu xuất {obj_in.export_code} đã tồn tại.")
+
         # 1. Tạo Header Phiếu Xuất
         db_export = MaterialExport(
             export_code=obj_in.export_code,
             export_date=obj_in.export_date or datetime.now().date(),
             warehouse_id=obj_in.warehouse_id,
             department_id=obj_in.department_id,
+            exporter_id=obj_in.exporter_id,
             receiver_id=obj_in.receiver_id,
             shift_id=obj_in.shift_id,
             note=obj_in.note,
@@ -93,7 +143,7 @@ class MaterialExportService:
                 ).first()
                 
                 if existing_ticket:
-                     raise HTTPException(
+                      raise HTTPException(
                         status_code=400, 
                         detail=f"Máy {detail_in.machine_id} Line {detail_in.machine_line} đang hoạt động. Vui lòng hạ rổ trước."
                     )
@@ -139,8 +189,7 @@ class MaterialExportService:
                 raise HTTPException(status_code=400, detail=f"Lỗi kho: {str(e)}")
 
             # --- C. TỰ ĐỘNG TẠO PHIẾU RỔ DỆT ---
-            if (detail_in.machine_id and detail_in.product_id and 
-                detail_in.basket_id and detail_in.standard_id):
+            if (detail_in.machine_id and detail_in.product_id):
                 
                 self._create_auto_weaving_ticket(
                     header_in=obj_in,
@@ -148,17 +197,17 @@ class MaterialExportService:
                 )
                 
                 # Cập nhật trạng thái rổ -> IN_USE
-                # Lưu ý: Query lại basket để đảm bảo session track đúng object
-                basket_to_update = self.db.query(Basket).get(detail_in.basket_id)
-                if basket_to_update:
-                    basket_to_update.status = BasketStatus.IN_USE
-                    self.db.add(basket_to_update)
+                if detail_in.basket_id:
+                    basket_to_update = self.db.query(Basket).get(detail_in.basket_id)
+                    if basket_to_update:
+                        basket_to_update.status = BasketStatus.IN_USE
+                        self.db.add(basket_to_update)
 
         # 3. COMMIT TOÀN BỘ
         try:
             self.db.commit()
             self.db.refresh(db_export)
-            return db_export # [QUAN TRỌNG] Trả về object để FastAPI serialize
+            return db_export 
         except Exception as e:
             self.db.rollback()
             raise HTTPException(status_code=500, detail=f"Lỗi hệ thống khi lưu phiếu xuất: {str(e)}")
@@ -172,16 +221,16 @@ class MaterialExportService:
         new_ticket = WeavingBasketTicket(
             code=ticket_code,
             product_id=detail_in.product_id,
-            standard_id=detail_in.standard_id,
+            standard_id=None,
             machine_id=detail_in.machine_id,
             machine_line=detail_in.machine_line,
             
             yarn_load_date=header_in.export_date,
             batch_id=detail_in.batch_id,
-            basket_id=detail_in.basket_id,
+            basket_id=None,
             
             time_in=datetime.now(),
-            employee_in_id=header_in.receiver_id,
+            employee_in_id=None,
             
             number_of_knots=0,
             gross_weight=0.0,
@@ -190,6 +239,7 @@ class MaterialExportService:
         )
         self.db.add(new_ticket)
 
+    # ... (Các hàm update, delete giữ nguyên)
     # ============================
     # UPDATE
     # ============================
@@ -248,7 +298,6 @@ class MaterialExportService:
                     basket.status = BasketStatus.READY
                     self.db.add(basket)
 
-        # Xóa Header
         self.db.delete(db_obj)
         self.db.commit()
         return {"message": "Đã hủy phiếu xuất thành công."}

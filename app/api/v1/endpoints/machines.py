@@ -4,12 +4,12 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form
 from sqlalchemy.orm import Session
 from typing import List, Optional
-
+from app.schemas.machine_log_schema import MachineLogResponse
 from app.api import deps
 from app.schemas.machine_schema import (
     MachineResponse,
     MachineCreate,
-    MachineUpdate
+    MachineUpdate,
 )
 from app.services import machine_service
 
@@ -145,3 +145,20 @@ def update_machine_status_endpoint(
         raise HTTPException(status_code=404, detail="Machine not found")
         
     return updated_machine
+
+@router.get("/{machine_id}/history", response_model=List[MachineLogResponse])
+def read_machine_history(
+    machine_id: int,
+    limit: int = 100,
+    db: Session = Depends(deps.get_db)
+):
+    """
+    Lấy lịch sử hoạt động của một máy cụ thể.
+    """
+    history_logs = machine_service.get_machine_history(db, machine_id=machine_id, limit=limit)
+    
+    # Nếu không có log nào, trả về danh sách rỗng [] (không báo lỗi 404 để frontend hiển thị "Trống")
+    if history_logs is None:
+        return []
+        
+    return history_logs

@@ -31,4 +31,5 @@ from app.models.material_receipt import MaterialReceipt,MaterialReceiptDetail
 from app.models.batch import Batch     
 from app.models.iqc_result import IQCResult     
 from app.models.inventory import InventoryStock    
-from app.models.material_export import MaterialExport,MaterialExportDetail        
+from app.models.material_export import MaterialExport,MaterialExportDetail
+from app.models.machine_log import MachineLog
