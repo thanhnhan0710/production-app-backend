@@ -59,7 +59,3 @@ class Supplier(Base):
     address = Column(Text, nullable=True)
     lead_time_days = Column(Integer, default=7, comment="Thời gian giao hàng trung bình (ngày)")
     is_active = Column(Boolean, default=True)
-
-    # Relationship tới bảng Sợi (Yarn)
-    # Lưu ý: Cần đảm bảo bảng Yarn đã được định nghĩa hoặc import đúng cách
-    yarns = relationship("Yarn", back_populates="supplier")

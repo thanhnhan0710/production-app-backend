@@ -2,16 +2,21 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import date
 
-# Base Detail (Giữ nguyên)
+# Base Detail
 class MaterialExportDetailBase(BaseModel):
     material_id: int
     batch_id: int
     quantity: float
+    
+    # [MỚI] Loại thành phần sợi (GROUND, FILLING...)
+    component_type: Optional[str] = None 
+
     machine_id: Optional[int] = None
     machine_line: Optional[int] = None
     product_id: Optional[int] = None
     standard_id: Optional[int] = None
     basket_id: Optional[int] = None
+    
     note: Optional[str] = None
 
 class MaterialExportDetailCreate(MaterialExportDetailBase):
@@ -20,6 +25,7 @@ class MaterialExportDetailCreate(MaterialExportDetailBase):
 class MaterialExportDetailUpdate(BaseModel):
     quantity: Optional[float] = None
     note: Optional[str] = None
+    component_type: Optional[str] = None # Cho phép sửa loại sợi
 
 class MaterialExportDetailResponse(MaterialExportDetailBase):
     detail_id: int
@@ -32,7 +38,7 @@ class MaterialExportBase(BaseModel):
     export_date: Optional[date] = None
     warehouse_id: int
     department_id: Optional[int] = None
-    exporter_id: Optional[int] = None  # (MỚI) Người xuất kho
+    exporter_id: Optional[int] = None 
     receiver_id: int 
     shift_id: Optional[int] = None
     note: Optional[str] = None
@@ -44,7 +50,7 @@ class MaterialExportCreate(MaterialExportBase):
 class MaterialExportUpdate(BaseModel):
     export_date: Optional[date] = None
     department_id: Optional[int] = None
-    exporter_id: Optional[int] = None # (MỚI)
+    exporter_id: Optional[int] = None
     receiver_id: Optional[int] = None
     shift_id: Optional[int] = None
     note: Optional[str] = None
@@ -59,7 +65,7 @@ class MaterialExportResponse(MaterialExportBase):
 class MaterialExportFilter(BaseModel):
     search: Optional[str] = None
     warehouse_id: Optional[int] = None
-    exporter_id: Optional[int] = None # (MỚI)
+    exporter_id: Optional[int] = None
     receiver_id: Optional[int] = None
     from_date: Optional[date] = None
     to_date: Optional[date] = None

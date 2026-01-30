@@ -3,7 +3,43 @@ from sqlalchemy.orm import relationship
 from app.db.base_class import Base
 import datetime
 
-# 1. Bảng Phiếu thông tin rổ dệt
+# =======================================================
+# 1. Bảng Chi tiết các lô sợi trong phiếu (New Table)
+# =======================================================
+class WeavingTicketYarn(Base):
+    """
+    Bảng này lưu trữ thông tin: Phiếu này dùng Batch nào cho thành phần nào?
+    Ví dụ: 
+    - Ticket A dùng Batch #101 cho 'GROUND', số lượng 50kg
+    - Ticket A dùng Batch #205 cho 'FILLING', số lượng 30kg
+    """
+    __tablename__ = "weaving_ticket_yarns"
+
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Liên kết với Phiếu rổ dệt
+    ticket_id = Column(Integer, ForeignKey("weaving_basket_tickets.id"), nullable=False)
+    
+    # Liên kết với Lô sợi (Batch)
+    batch_id = Column(Integer, ForeignKey("batches.batch_id"), nullable=False)
+    
+    # Loại thành phần (Lấy từ Enum BOMComponentType: GROUND, FILLING, BINDER...)
+    component_type = Column(String(50), nullable=False) 
+    
+    # [MỚI] Số lượng xuất (kg)
+    quantity = Column(Float, default=0.0) 
+    
+    # Ghi chú thêm (nếu cần)
+    note = Column(String(255), nullable=True)
+
+    # --- Relationships ---
+    batch = relationship("Batch")
+    ticket = relationship("WeavingBasketTicket", back_populates="yarns")
+
+
+# =======================================================
+# 2. Bảng Phiếu thông tin rổ dệt (Updated Table)
+# =======================================================
 class WeavingBasketTicket(Base):
     __tablename__ = "weaving_basket_tickets"
 
@@ -14,32 +50,25 @@ class WeavingBasketTicket(Base):
     product_id = Column(Integer, ForeignKey("products.product_id"), nullable=False)
     standard_id = Column(Integer, ForeignKey("standards.standard_id"), nullable=True)
     machine_id = Column(Integer, ForeignKey("machines.machine_id"), nullable=False)
-    
-    # Lưu ý: Cột này bạn mới thêm ở bước trước, hãy giữ lại
     machine_line = Column(Integer, nullable=False)
     
-    # --- Thông tin sợi & Rổ ---
-    yarn_load_date = Column(Date, nullable=False)        # Ngày lên sợi
-    
-    # [CHANGE] Thay yarn_lot_id bằng batch_id
-    # Liên kết tới bảng 'batches' thông qua cột khóa chính 'batch_id'
-    batch_id = Column(Integer, ForeignKey("batches.batch_id"), nullable=True) 
-    
+    # --- Thông tin Rổ ---
+    yarn_load_date = Column(Date, nullable=False)
     basket_id = Column(Integer, ForeignKey("baskets.basket_id"), nullable=True)  
     
     # --- Quy trình Vào rổ (Start) ---
     time_in = Column(DateTime, default=datetime.datetime.now) 
-    employee_in_id = Column(Integer, ForeignKey("employees.employee_id"), nullable=True) 
+    employee_in_id = Column(Integer, ForeignKey("employees.employee_id"), nullable=True)
     
     # --- Quy trình Ra rổ (Finish) ---
-    time_out = Column(DateTime, nullable=True)           # Thời gian ra rổ
-    employee_out_id = Column(Integer, ForeignKey("employees.employee_id"), nullable=True) # NV ra
+    time_out = Column(DateTime, nullable=True)
+    employee_out_id = Column(Integer, ForeignKey("employees.employee_id"), nullable=True)
     
     # --- Thông số kết quả ---
-    gross_weight = Column(Float, nullable=True)          # Tổng trọng lượng (Cả bì)
-    net_weight = Column(Float, nullable=True)            # Trọng lượng tịnh (Trừ bì)
-    length_meters = Column(Float, nullable=True)         # Chiều dài (m)
-    number_of_knots = Column(Integer, default=0)         # Số mối nối
+    gross_weight = Column(Float, nullable=True)
+    net_weight = Column(Float, nullable=True)
+    length_meters = Column(Float, nullable=True)
+    number_of_knots = Column(Integer, default=0)
 
     # --- Relationships ---
     employee_in = relationship("Employee", foreign_keys=[employee_in_id])
@@ -49,5 +78,5 @@ class WeavingBasketTicket(Base):
     product = relationship("Product")
     inspections = relationship("WeavingInspection", back_populates="ticket")
     
-    # [NEW] Relationship để truy cập thông tin Batch từ Ticket
-    batch = relationship("Batch")
+    # Relationship 1-N: Một phiếu có nhiều lô sợi thành phần
+    yarns = relationship("WeavingTicketYarn", back_populates="ticket", cascade="all, delete-orphan")

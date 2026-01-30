@@ -3,7 +3,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.base_class import Base
 
-# Bảng Header: Phiếu xuất kho
+# Bảng Header: Phiếu xuất kho (Giữ nguyên)
 class MaterialExport(Base):
     __tablename__ = "material_exports"
 
@@ -14,7 +14,7 @@ class MaterialExport(Base):
     # 1. Xuất từ kho nào
     warehouse_id = Column(Integer, ForeignKey("warehouses.warehouse_id"), nullable=False)
     
-    # 2. Người xuất kho (MỚI)
+    # 2. Người xuất kho
     exporter_id = Column(Integer, ForeignKey("employees.employee_id"), nullable=True)
 
     # 3. Xuất cho ai (Người nhận - Đứng máy)
@@ -33,13 +33,12 @@ class MaterialExport(Base):
     department = relationship("Department")
     shift = relationship("Shift")
     
-    # Định nghĩa rõ foreign_keys vì có 2 trường trỏ tới Employee
     exporter = relationship("Employee", foreign_keys=[exporter_id])
     receiver = relationship("Employee", foreign_keys=[receiver_id])
     
     details = relationship("MaterialExportDetail", back_populates="header", cascade="all, delete-orphan")
 
-# Bảng Detail: Chi tiết xuất (Giữ nguyên)
+# Bảng Detail: Chi tiết xuất (Cập nhật)
 class MaterialExportDetail(Base):
     __tablename__ = "material_export_details"
 
@@ -50,6 +49,11 @@ class MaterialExportDetail(Base):
     batch_id = Column(Integer, ForeignKey("batches.batch_id"), nullable=False)
     quantity = Column(Float, nullable=False)
     
+    # [NEW] Loại thành phần sợi (Lấy từ BOMComponentType: GROUND, BINDER, FILLING...)
+    # Ví dụ: Batch A xuất 50kg làm sợi GROUND, Batch B xuất 10kg làm sợi BINDER
+    component_type = Column(String(50), nullable=True) 
+
+    # Thông tin sản xuất (Đích đến)
     machine_id = Column(Integer, ForeignKey("machines.machine_id"), nullable=True)
     machine_line = Column(Integer, nullable=True)
     
@@ -59,6 +63,7 @@ class MaterialExportDetail(Base):
     
     note = Column(String(200), nullable=True)
 
+    # Relationships
     header = relationship("MaterialExport", back_populates="details")
     material = relationship("Material")
     batch = relationship("Batch")
