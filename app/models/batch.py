@@ -43,15 +43,25 @@ class Batch(Base):
 
     # Relationships
     material = relationship("Material")
-    receipt_detail = relationship("MaterialReceiptDetail", lazy="joined") # Đã có sẵn link tới chi tiết nhập
 
+    receipt_detail = relationship(
+        "MaterialReceiptDetail", 
+        lazy="joined", 
+        innerjoin=False
+    )
     # [MỚI] Thuộc tính ảo 'supplier'
     # Giúp Pydantic nhìn thấy field 'supplier' dù không có cột trong DB
     @property
     def supplier(self) -> Optional["Supplier"]:
         try:
-            if self.receipt_detail and self.receipt_detail.header:
-                return self.receipt_detail.header.supplier
+            # Đi từ Batch -> Detail -> Header (Receipt) -> PO Header -> VENDOR
+            if (self.receipt_detail and 
+                self.receipt_detail.header and 
+                self.receipt_detail.header.po_header):
+                
+                # SỬA TẠI ĐÂY: Dùng .vendor thay vì .supplier
+                return self.receipt_detail.header.po_header.vendor 
+                
         except AttributeError:
             pass
         return None

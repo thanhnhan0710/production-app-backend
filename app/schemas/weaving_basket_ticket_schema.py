@@ -27,7 +27,7 @@ class EmployeeShort(BaseModel):
 # [MỚI] Schema Supplier rút gọn
 class SupplierShort(BaseModel):
     supplier_id: int
-    supplier_short_name: Optional[str] = None
+    short_name: Optional[str] = None
     class Config:
         from_attributes = True
 
@@ -105,8 +105,10 @@ class WeavingTicketUpdate(BaseModel):
     machine_line: Optional[int] = None
     basket_id: Optional[int] = None
     yarn_load_date: Optional[date] = None
-    time_out: Optional[datetime] = None
+    employee_in_id: Optional[int] = None
+    time_in: Optional[datetime] = None
     employee_out_id: Optional[int] = None
+    time_out: Optional[datetime] = None
     gross_weight: Optional[float] = Field(None, ge=0)
     net_weight: Optional[float] = Field(None)
     length_meters: Optional[float] = Field(None, ge=0)

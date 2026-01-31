@@ -3,6 +3,13 @@ from typing import Optional
 from datetime import date, datetime
 from app.models.batch import BatchQCStatus
 
+class SupplierInBatch(BaseModel):
+    supplier_id: int
+    short_name: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
 class BatchBase(BaseModel):
     supplier_batch_no: str
     material_id: int
@@ -42,6 +49,7 @@ class BatchResponse(BatchBase):
     internal_batch_code: str
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    supplier: Optional[SupplierInBatch] = None
     
     # [MỚI] Trường này sẽ tự động lấy từ @property trong Model
     receipt_number: Optional[str] = None 
