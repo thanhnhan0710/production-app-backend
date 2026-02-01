@@ -29,3 +29,4 @@ from app.models.iqc_result import IQCResult
 from app.models.inventory import InventoryStock    
 from app.models.material_export import MaterialExport,MaterialExportDetail
 from app.models.machine_log import MachineLog
+from app.models.weaving_production import WeavingProduction

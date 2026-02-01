@@ -24,3 +24,4 @@ class Employee(Base):
     department = relationship("Department", back_populates="employees")
     work_schedules = relationship("WorkSchedule", back_populates="employee")
     user = relationship("User", back_populates="employee", uselist=False)
+    weaving_updates = relationship("WeavingProduction", back_populates="updated_by")

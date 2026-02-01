@@ -10,3 +10,4 @@ class Shift(Base):
     note = Column(String(255), nullable=True)
     
     work_schedules = relationship("WorkSchedule", back_populates="shift")
+    weaving_productions = relationship("WeavingProduction", back_populates="shift")

@@ -1,6 +1,7 @@
 import enum
 from sqlalchemy import Column, Integer, String, Float, Text, Enum
 from app.db.base_class import Base
+from sqlalchemy.orm import relationship
 
 # 1. Định nghĩa các trạng thái của Rổ (để tránh nhập sai chính tả)
 class BasketStatus(str, enum.Enum):
@@ -21,3 +22,4 @@ class Basket(Base):
     # default là READY (Sẵn sàng)
     status = Column(Enum(BasketStatus), default=BasketStatus.READY, nullable=False)
     note = Column(Text, nullable=True) # Ghi chú
+    weaving_productions = relationship("WeavingProduction", back_populates="basket")

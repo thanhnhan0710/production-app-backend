@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Any, Union
-from jose import jwt
+from jose import JWTError, jwt
 from passlib.context import CryptContext
 from app.core.config import settings
 
@@ -22,3 +22,16 @@ def create_access_token(subject: Union[str, Any], expires_delta: Optional[timede
     to_encode = {"exp": expire, "sub": str(subject)}
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
+def decode_token(token: str) -> dict | None:
+    """
+    Hàm giải mã token JWT để lấy payload (user_id, sub...)
+    """
+    try:
+        payload = jwt.decode(
+            token, 
+            settings.SECRET_KEY, 
+            algorithms=[settings.ALGORITHM] # Hoặc dùng biến ALGORITHM nếu settings không có
+        )
+        return payload
+    except JWTError:
+        return None

@@ -1,6 +1,7 @@
 import enum
 from sqlalchemy import Column, Integer, String, Enum
 from app.db.base_class import Base
+from sqlalchemy.orm import relationship
 
 # 1. Định nghĩa các trạng thái của Máy
 class MachineStatus(str, enum.Enum):
@@ -39,3 +40,5 @@ class Machine(Base):
         nullable=True, 
         index=True 
     )
+
+    weaving_productions = relationship("WeavingProduction", back_populates="machine")
