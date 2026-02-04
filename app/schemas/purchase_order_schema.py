@@ -29,8 +29,10 @@ class POStatus(str, Enum):
 class PODetailBase(BaseModel):
     material_id: int
     quantity: float
+    quantity_rolls: Optional[int] = 0
     unit_price: float
     uom_id: Optional[int] = None
+    is_pricing_by_roll: Optional[bool] = False
 
 class PODetailCreate(PODetailBase):
     pass
@@ -45,6 +47,7 @@ class PODetailResponse(PODetailBase):
     detail_id: int
     line_total: float
     received_quantity: float
+    received_rolls: Optional[int] = 0
     
     # [QUAN TRỌNG] Thêm các trường này để hiển thị tên
     material: Optional[MaterialResponse] = None
@@ -78,6 +81,7 @@ class POHeaderUpdate(BaseModel):
     exchange_rate: Optional[float] = None
     status: Optional[POStatus] = None
     note: Optional[str] = None
+    details: Optional[List[PODetailCreate]] = None
 
 class POHeaderResponse(POHeaderBase):
     po_id: int

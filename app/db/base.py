@@ -19,11 +19,11 @@ from app.models.log import Log
 from app.models.inventory_semi import SemiFinishedImportTicket, SemiFinishedImportDetail, SemiFinishedExportTicket, SemiFinishedExportDetail
 from app.models.weaving_daily_production import WeavingDailyProduction
 from app.models.bom_header import BOMHeader  # noqa
-from app.models.bom_detail import BOMDetail 
+from app.models.bom_detail import BOMDetail
 from app.models.purchase_order import PurchaseOrderHeader,PurchaseOrderDetail
 from app.models.import_declaration import ImportDeclaration,ImportDeclarationDetail
 from app.models.warehouse import Warehouse
-from app.models.material_receipt import MaterialReceipt,MaterialReceiptDetail   
+from app.models.material_receipt import MaterialReceipt,MaterialReceiptDetail
 from app.models.batch import Batch     
 from app.models.iqc_result import IQCResult     
 from app.models.inventory import InventoryStock    

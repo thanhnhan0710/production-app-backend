@@ -1,16 +1,17 @@
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import inspect
-from sqlalchemy.orm import Session, joinedload # [QUAN TRỌNG] Thêm joinedload
+from sqlalchemy.orm import Session, joinedload
 
 from app.api import deps
 from app.core.model_map import get_model_by_tablename
 from app.schemas.log_schema import LogResponse
 from app.models.log import Log
-from app.models.user import User # Import model User
+from app.models.user import User 
 
 router = APIRouter()
 
+# 1. READ LOGS (Chỉ Admin)
 @router.get("/", response_model=List[LogResponse])
 def read_logs(
     skip: int = 0,
@@ -18,8 +19,13 @@ def read_logs(
     user_id: Optional[int] = None,
     target_type: Optional[str] = None,
     db: Session = Depends(deps.get_db),
+    # [BẢO MẬT] Chỉ Admin mới được xem log hệ thống
+    current_user: User = Depends(deps.get_current_active_admin),
 ) -> Any:
-    # [SỬA LỖI] Thêm options joinedload để lấy thông tin User
+    """
+    Retrieve system logs. Restricted to Admins.
+    """
+    # Use joinedload to eagerly load the 'user' relationship
     query = db.query(Log).options(joinedload(Log.user))
     
     if user_id:
@@ -29,13 +35,10 @@ def read_logs(
         
     logs = query.order_by(Log.timestamp.desc()).offset(skip).limit(limit).all()
     
-    # Map dữ liệu User vào response (nếu Schema chưa tự map)
-    # Tuy nhiên, nếu LogResponse config from_attributes=True và có field user_email
-    # Bạn cần đảm bảo schema LogResponse lấy được email.
-    
+    # Map to response format
     results = []
     for log in logs:
-        # Chuyển object SQLAlchemy sang dict cơ bản
+        # Create a dict that matches LogResponse schema
         log_dict = {
             "id": log.id,
             "user_id": log.user_id,
@@ -46,49 +49,57 @@ def read_logs(
             "changes": log.changes,
             "ip_address": log.ip_address,
             "timestamp": log.timestamp,
-            # Tự lấy email từ relation
+            # Safely access user email
             "user_email": log.user.email if log.user else "Unknown"
         }
         results.append(log_dict)
     
     return results
 
+# 2. REVERT LOG (Chỉ Admin)
 @router.post("/{log_id}/revert")
 def revert_log_change(
     log_id: int,
     db: Session = Depends(deps.get_db),
+    # [BẢO MẬT] Chỉ Admin mới được hoàn tác dữ liệu
+    current_user: User = Depends(deps.get_current_active_admin),
 ) -> Any:
-    # 1. Tìm Log
+    """
+    Revert a specific change based on its log ID.
+    Supports reverting UPDATE and DELETE actions. Restricted to Admins.
+    """
+    # 1. Find the Log entry
     log = db.query(Log).filter(Log.id == log_id).first()
     if not log:
-        raise HTTPException(status_code=404, detail="Không tìm thấy nhật ký")
+        raise HTTPException(status_code=404, detail="Log entry not found")
 
-    # 2. Xác định Model Class
+    # 2. Identify the Model Class
     model_class = get_model_by_tablename(log.target_type)
     if not model_class:
-        raise HTTPException(status_code=400, detail=f"Không hỗ trợ khôi phục cho bảng '{log.target_type}'")
+        raise HTTPException(status_code=400, detail=f"Revert not supported for table '{log.target_type}'")
 
-    # Xác định cột khóa chính (PK)
+    # Identify the Primary Key column
     try:
         pk_column = inspect(model_class).primary_key[0]
     except Exception:
-        raise HTTPException(status_code=500, detail="Lỗi xác định khóa chính")
+        raise HTTPException(status_code=500, detail="Could not determine primary key for model")
 
-    # --- TRƯỜNG HỢP 1: HOÀN TÁC CẬP NHẬT (UPDATE) ---
+    # --- CASE 1: REVERT UPDATE ---
     if log.action == "UPDATE":
         if not log.changes or "old" not in log.changes:
-            raise HTTPException(status_code=400, detail="Không có dữ liệu cũ để khôi phục")
+            raise HTTPException(status_code=400, detail="No historical data available to revert")
 
-        # Tìm đối tượng hiện tại
+        # Find the current object
         target_obj = db.query(model_class).filter(pk_column == log.target_id).first()
         if not target_obj:
-            raise HTTPException(status_code=404, detail=f"Dữ liệu gốc (ID {log.target_id}) đã bị xóa, không thể hoàn tác update.")
+            raise HTTPException(status_code=404, detail=f"Original data (ID {log.target_id}) has been deleted. Cannot revert update.")
 
-        # Revert
+        # Revert fields
         old_data = log.changes["old"]
         count = 0
         for key, value in old_data.items():
             if hasattr(target_obj, key):
+                # Handle "None" string from JSON if necessary
                 if value == "None": value = None
                 setattr(target_obj, key, value)
                 count += 1
@@ -97,41 +108,40 @@ def revert_log_change(
             db.commit()
             db.refresh(target_obj)
         
-        return {"message": "Đã hoàn tác cập nhật thành công"}
+        return {"message": "Update reverted successfully"}
 
-    # --- TRƯỜNG HỢP 2: HOÀN TÁC XÓA (DELETE) ---
+    # --- CASE 2: REVERT DELETE ---
     elif log.action == "DELETE":
         if not log.changes or "old" not in log.changes:
-            raise HTTPException(status_code=400, detail="Không có dữ liệu cũ để khôi phục")
+            raise HTTPException(status_code=400, detail="No historical data available to restore")
 
-        # Kiểm tra xem ID đó đã tồn tại lại chưa (tránh lỗi Duplicate Key)
+        # Check if ID already exists to avoid conflicts
         existing_obj = db.query(model_class).filter(pk_column == log.target_id).first()
         if existing_obj:
-            raise HTTPException(status_code=400, detail=f"Dữ liệu với ID {log.target_id} đang tồn tại, không thể khôi phục chồng lên.")
+            raise HTTPException(status_code=400, detail=f"Data with ID {log.target_id} already exists. Cannot restore.")
 
-        # Lấy dữ liệu cũ để tạo mới (Restore)
+        # Prepare data for restoration
         restore_data = log.changes["old"]
         
-        # Tạo object mới từ dữ liệu cũ (bao gồm cả ID nếu có trong restore_data)
-        # Lưu ý: Cần filter các key hợp lệ trong model để tránh lỗi nếu JSON lưu thừa
+        # Filter only valid columns for the model
         valid_columns = {c.key for c in inspect(model_class).mapper.column_attrs}
         clean_data = {k: v for k, v in restore_data.items() if k in valid_columns}
 
-        # Xử lý các giá trị "None" chuỗi thành None thật
+        # Handle "None" strings
         for k, v in clean_data.items():
             if v == "None": clean_data[k] = None
 
         try:
-            # Tạo instance mới
+            # Create new instance with old data
             new_obj = model_class(**clean_data)
             db.add(new_obj)
             db.commit()
             db.refresh(new_obj)
-            return {"message": f"Đã khôi phục dữ liệu đã xóa (ID {log.target_id})"}
+            return {"message": f"Deleted data restored successfully (ID {log.target_id})"}
         except Exception as e:
             db.rollback()
-            raise HTTPException(status_code=500, detail=f"Lỗi khi khôi phục: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error restoring data: {str(e)}")
 
-    # --- TRƯỜNG HỢP KHÁC ---
+    # --- OTHER CASES ---
     else:
-        raise HTTPException(status_code=400, detail=f"Chưa hỗ trợ hoàn tác cho hành động {log.action}")
+        raise HTTPException(status_code=400, detail=f"Revert not supported for action '{log.action}'")

@@ -1,5 +1,5 @@
 from typing import Optional, List
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
 
 # --- 0. Helper Schema (Định nghĩa trước để dùng trong UserResponse) ---
 class EmployeeShort(BaseModel):
@@ -17,6 +17,9 @@ class UserBase(BaseModel):
     is_active: Optional[bool] = True
     is_superuser: bool = False
     role: str = "staff"
+    @field_validator('role')
+    def normalize_role(cls, v):
+        return v.lower() if v else 'staff'
     
     # Thêm employee_id vào base để frontend có thể gửi lên hoặc nhận về ở mọi nơi
     employee_id: Optional[int] = None
@@ -35,6 +38,9 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
     is_active: Optional[bool] = None
     role: Optional[str] = None
+    @field_validator('role')
+    def normalize_role(cls, v):
+        return v.lower() if v else 'staff'
     
     # Cho phép update employee_id
     employee_id: Optional[int] = None

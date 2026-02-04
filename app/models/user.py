@@ -1,7 +1,16 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey
+import enum # [MỚI] Import thư viện enum của Python
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Enum # [MỚI] Import Enum của SQLAlchemy
 from sqlalchemy.orm import relationship
 from app.db.base_class import Base
-from app.models.log import Log
+# from app.models.log import Log # (Giữ nguyên import cũ của bạn)
+
+# 1. Định nghĩa các quyền (Role) cố định
+class UserRole(str, enum.Enum):
+    ADMIN = "admin"       # Quản trị viên (Toàn quyền)
+    MANAGER = "manager"   # Quản lý (Xem báo cáo, duyệt đơn)
+    STAFF = "staff"       # Nhân viên (Tạo đơn, xem đơn của mình)
+    WORKER="worker"
+    WAREHOUSE="warehouse"
 
 class User(Base):
     __tablename__ = "users"
@@ -16,18 +25,17 @@ class User(Base):
     full_name = Column(String(100), index=True)
     phone_number = Column(String(20), nullable=True)
     
-    # [NEW] Liên kết với bảng Employee
-    # Lưu ý: Đảm bảo bảng 'employees' đã tồn tại trong database
+    # Liên kết với bảng Employee
     employee_id = Column(Integer, ForeignKey("employees.employee_id"), nullable=True)
     
     # Trạng thái & Phân quyền
-    is_active = Column(Boolean, default=True)      # Cho phép đăng nhập hay không
-    is_superuser = Column(Boolean, default=False)  # Admin hệ thống
-    role = Column(String(50), default="staff")     # Ví dụ: admin, manager, staff, worker
+    is_active = Column(Boolean, default=True)
+    is_superuser = Column(Boolean, default=False)
+    
+    # [CẬP NHẬT] Thay đổi từ String sang Enum
+    # Cũ: role = Column(String(50), default="staff")
+    role = Column(Enum(UserRole), default=UserRole.STAFF, nullable=False)
     
     # Relationships
     logs = relationship("Log", back_populates="user")
-    
-    # [NEW] Relationship để lấy thông tin nhân viên
-    # Sử dụng back_populates để truy vấn 2 chiều (cần khai báo user bên model Employee)
     employee = relationship("Employee", back_populates="user")

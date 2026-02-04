@@ -1,5 +1,5 @@
 import enum
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, Date, Enum, DateTime
+from sqlalchemy import Boolean, Column, Integer, String, Float, ForeignKey, Date, Enum, DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.base_class import Base
@@ -60,15 +60,18 @@ class PurchaseOrderDetail(Base):
     material_id = Column(Integer, ForeignKey("materials.id"), nullable=False)
     
     quantity = Column(Float, nullable=False) # Số lượng mua
+    quantity_rolls = Column(Integer, default=0)
     unit_price = Column(Float, nullable=False) # Đơn giá
     
     # Đơn vị tính khi mua (Thường là Kg hoặc Pounds)
     uom_id = Column(Integer, ForeignKey("units.unit_id"), nullable=True) 
     
     line_total = Column(Float, default=0.0) # Thành tiền = SL * Đơn giá
+    is_pricing_by_roll = Column(Boolean, default=False)
     
     # Theo dõi nhập kho cho dòng này (để biết thiếu đủ)
-    received_quantity = Column(Float, default=0.0) 
+    received_quantity = Column(Float, default=0.0)
+    received_rolls = Column(Integer, default=0)     # [MỚI] Số cuộn đã nhập
 
     # Relationships
     header = relationship("PurchaseOrderHeader", back_populates="details")
