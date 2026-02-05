@@ -1,4 +1,4 @@
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Dict
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 
@@ -21,7 +21,7 @@ router = APIRouter()
 def read_boms(
     db: Session = Depends(get_db),
     product_code: Optional[str] = Query(None, description="Tìm theo mã sản phẩm (Item Code)"),
-    year: Optional[int] = Query(None, description="Tìm theo năm áp dụng (VD: 2026)"), # [THAY ĐỔI] Thay bom_code bằng year
+    year: Optional[int] = Query(None, description="Tìm theo năm áp dụng (VD: 2026)"), 
     is_active: Optional[bool] = Query(None, description="Lọc theo trạng thái kích hoạt"),
 ) -> Any:
     """
@@ -56,7 +56,6 @@ def create_bom(
     except HTTPException as e:
         raise e
     except Exception as e:
-        # Bắt các lỗi không mong muốn khác
         raise HTTPException(status_code=400, detail=str(e))
 
 # -------------------------------------------------------------------
@@ -70,7 +69,6 @@ def read_bom_by_id(
     """
     Xem chi tiết cấu trúc của một BOM cụ thể.
     """
-    # [QUAN TRỌNG] Thêm joinedload để lấy luôn danh sách bom_details
     bom = db.query(BOMHeader)\
         .options(joinedload(BOMHeader.bom_details))\
         .filter(BOMHeader.bom_id == bom_id)\
@@ -81,7 +79,36 @@ def read_bom_by_id(
     return bom
 
 # -------------------------------------------------------------------
-# 4. CẬP NHẬT BOM (Tính toán lại toàn bộ)
+# 4. [MỚI] LẤY BẢNG TỔNG HỢP SỐ CUỘN (SUMMARY)
+# -------------------------------------------------------------------
+@router.get("/{bom_id}/summary", response_model=List[Dict[str, Any]])
+def get_bom_summary(
+    bom_id: int,
+    db: Session = Depends(get_db)
+) -> Any:
+    """
+    API trả về bảng tổng hợp 'Số cuộn' (Total Rolls) cho từng loại sợi.
+    Dữ liệu trả về dạng:
+    [
+        {
+            "material_id": 1,
+            "material_name": "03300-PES-WEISS",
+            "total_rolls": 348
+        },
+        ...
+    ]
+    """
+    # Kiểm tra BOM tồn tại trước
+    bom = db.query(BOMHeader).filter(BOMHeader.bom_id == bom_id).first()
+    if not bom:
+        raise HTTPException(status_code=404, detail="BOM not found")
+        
+    # Gọi Service tính toán
+    summary = BOMService.get_bom_material_summary(db=db, bom_id=bom_id)
+    return summary
+
+# -------------------------------------------------------------------
+# 5. CẬP NHẬT BOM (Tính toán lại toàn bộ)
 # -------------------------------------------------------------------
 @router.put("/{bom_id}", response_model=BOMHeaderResponse)
 def update_bom(
@@ -104,7 +131,7 @@ def update_bom(
         raise HTTPException(status_code=400, detail=str(e))
 
 # -------------------------------------------------------------------
-# 5. XÓA BOM
+# 6. XÓA BOM
 # -------------------------------------------------------------------
 @router.delete("/{bom_id}", response_model=dict)
 def delete_bom(

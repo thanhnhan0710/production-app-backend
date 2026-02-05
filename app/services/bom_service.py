@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_, and_
+from sqlalchemy import or_, and_, func  # [QUAN TRỌNG] Thêm func để dùng hàm SUM, MAX
 from fastapi import HTTPException
 
 # Import Models
@@ -51,19 +51,41 @@ class BOMService:
             
             # Chuẩn hóa về chữ in hoa và xóa khoảng trắng thừa để so sánh chính xác
             comp_type = comp_type.upper().strip()
+            
+            # Lấy thông số từ Header để tính toán
+            width_m = header_data.width_behind_loom / 1000.0  # Đổi mm -> m
+            picks = header_data.picks
 
             # 2. Áp dụng công thức Excel
-            # Formula: Weight Theoretical
-            weight_theoretical = ((threads * dtex * twisted * (1 + (crossweave/100))) / 10000) * \
-                                 (1 + (header_data.total_scrap_rate/100)) * (1 + (header_data.total_shrinkage_rate/100))
+            if comp_type == "FILLING" or "WEFT" in comp_type:
+                # === CÔNG THỨC CHO SỢI NGANG (FILLING) ===
+                # Logic: (Length_per_pick * Picks * Threads * Twist * Dtex) / 10000
+                
+                # 1. Tính chiều dài sợi trong 1m dây (Width * Picks * Threads * Twisted)
+                length_per_meter_belt = width_m * picks * threads * twisted
+                
+                # 2. Tính trọng lượng lý thuyết (Weight Theoretical)
+                # Công thức: (Length * Dtex) / 10000 * (Scrap) * (Shrinkage)
+                weight_theoretical = (length_per_meter_belt * dtex / 10000) * \
+                                     (1 + (header_data.total_scrap_rate/100)) * \
+                                     (1 + (header_data.total_shrinkage_rate/100))
+                                     
+                # Filling thường tính Actual giống Theoretical
+                actual_cal = weight_theoretical
+                
+            else:
+                # === CÔNG THỨC CHO SỢI DỌC (WARP/BINDER/EDGE...) ===
+                # Logic cũ
+                weight_theoretical = ((threads * dtex * twisted * (1 + (crossweave/100))) / 10000) * \
+                                     (1 + (header_data.total_scrap_rate/100)) * \
+                                     (1 + (header_data.total_shrinkage_rate/100))
 
-            # Formula: Actual Calculation (Hệ số 11000)
-            actual_cal = (actual_len / 100) * (dtex / 11000) * threads
+                # Formula: Actual Calculation (Hệ số 11000)
+                actual_cal = (actual_len / 100) * (dtex / 11000) * threads
             
             # --- LOGIC ĐÃ CHỈNH SỬA ---
-            # So sánh với chuỗi IN HOA đã chuẩn hóa
-            # Nếu cần áp dụng cho cả 2ND FILLING, bạn có thể thêm: or comp_type == "2ND FILLING"
-            if comp_type == "FILLING":
+            # Nếu là Filling 2 lần (hoặc 2nd Filling) thì chia đôi thực tế
+            if comp_type == "FILLING" or comp_type == "2ND FILLING":
                 actual_cal = actual_cal / 2
                 
             total_actual_cal += actual_cal
@@ -116,7 +138,7 @@ class BOMService:
         if not product:
             raise HTTPException(status_code=404, detail=f"Product ID {bom_in.product_id} not found")
 
-        # 2. [MỚI] Kiểm tra trùng lặp (Product + Year)
+        # 2. Kiểm tra trùng lặp (Product + Year)
         existing_bom = db.query(BOMHeader).filter(
             BOMHeader.product_id == bom_in.product_id,
             BOMHeader.applicable_year == bom_in.applicable_year
@@ -128,10 +150,10 @@ class BOMService:
                 detail=f"BOM for Product {product.item_code} in Year {bom_in.applicable_year} already exists."
             )
 
-        # 3. Tạo Header (Bỏ bom_code/name, thêm applicable_year)
+        # 3. Tạo Header
         db_header = BOMHeader(
             product_id=bom_in.product_id,
-            applicable_year=bom_in.applicable_year, # <--- Trường mới
+            applicable_year=bom_in.applicable_year,
             
             target_weight_gm=bom_in.target_weight_gm,
             total_scrap_rate=bom_in.total_scrap_rate,
@@ -155,7 +177,7 @@ class BOMService:
         if not db_bom:
             raise HTTPException(status_code=404, detail="BOM not found")
 
-        # 1. [MỚI] Validate Unique Year nếu có thay đổi năm
+        # 1. Validate Unique Year nếu có thay đổi năm
         if bom_update.applicable_year is not None and bom_update.applicable_year != db_bom.applicable_year:
             conflict_bom = db.query(BOMHeader).filter(
                 BOMHeader.product_id == db_bom.product_id,
@@ -202,16 +224,13 @@ class BOMService:
     @staticmethod
     def search_boms(db: Session, product_code: str = None, year: int = None, is_active: bool = None):
         """
-        Tìm kiếm BOM theo Product Code và Năm (Thay vì bom_code)
+        Tìm kiếm BOM theo Product Code và Năm
         """
         query = db.query(BOMHeader).join(Product)
 
-        # Filter theo Product Code
         if product_code:
-            # Giả sử trường code trong Product là item_code
             query = query.filter(Product.item_code.ilike(f"%{product_code}%")) 
         
-        # Filter theo Năm (Exact match)
         if year:
             query = query.filter(BOMHeader.applicable_year == year)
             
@@ -219,3 +238,39 @@ class BOMService:
             query = query.filter(BOMHeader.is_active == is_active)
 
         return query.options(joinedload(BOMHeader.bom_details)).all()
+
+    # --- [TÍNH NĂNG MỚI] TÍNH TỔNG SỐ CUỘN ---
+    @staticmethod
+    def get_bom_material_summary(db: Session, bom_id: int):
+        """
+        API Support: Trả về danh sách tổng hợp số cuộn sợi cần thiết.
+        Logic: Group By Tên sợi (hoặc Material ID) -> Sum(Threads)
+        """
+        # 1. Truy vấn DB: Group theo yarn_type_name và tính tổng threads
+        summary_query = db.query(
+            BOMDetail.yarn_type_name.label("material_name"), # Group theo tên sợi
+            func.sum(BOMDetail.threads).label("total_rolls"), # Tính tổng số cuộn
+            BOMDetail.material_id,                             # Lấy thêm ID để tham chiếu nếu cần
+            # Có thể thêm màu sắc hoặc component_type nếu muốn group chi tiết hơn
+        ).filter(
+            BOMDetail.bom_id == bom_id
+        ).group_by(
+            BOMDetail.yarn_type_name,
+            BOMDetail.material_id
+        ).all()
+
+        # 2. Format dữ liệu trả về cho Frontend
+        result = []
+        for row in summary_query:
+            # Chỉ lấy những dòng có số cuộn > 0 và có tên sợi
+            if row.total_rolls and row.total_rolls > 0 and row.material_name:
+                result.append({
+                    "material_id": row.material_id,
+                    "material_name": row.material_name, # VD: 03300-PES-WEISS
+                    "total_rolls": int(row.total_rolls) # VD: 348
+                })
+        
+        # Sắp xếp theo tên sợi cho dễ nhìn
+        result.sort(key=lambda x: x['material_name'])
+        
+        return result

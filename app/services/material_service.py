@@ -62,6 +62,7 @@ def search_materials(
         .filter(
             or_(
                 Material.material_code.ilike(search_term),  # Tìm theo mã
+                Material.material_name.ilike(search_term),
                 Material.material_type.ilike(search_term),  # Tìm theo loại (Polyester...)
                 Material.spec_denier.ilike(search_term),    # Tìm theo thông số (1000D...)
                 Material.hs_code.ilike(search_term)         # Tìm theo HS Code

@@ -40,35 +40,26 @@ app.add_middleware(
 # Middleware này sẽ chạy trước mỗi request để lấy User ID
 @app.middleware("http")
 async def audit_log_middleware(request: Request, call_next):
-    # a. Reset context (đặt về None) để tránh dùng nhầm ID của request trước đó
-    token = user_id_context.set(None)
-    
+    token_ctx = user_id_context.set(None)
     try:
-        # b. Lấy header Authorization
         auth_header = request.headers.get("Authorization")
         if auth_header:
-            # Định dạng chuẩn: "Bearer <token>"
-            scheme, _, param = auth_header.partition(" ")
-            if scheme.lower() == 'bearer':
-                # Giải mã token để lấy user_id (sub)
-                payload = decode_token(param)
-                user_id = payload.get("sub") # Hoặc payload.get("id") tùy cách bạn tạo token
-                
+            # Dùng split thay vì partition để an toàn hơn với khoảng trắng
+            parts = auth_header.split()
+            if len(parts) == 2 and parts[0].lower() == "bearer":
+                token = parts[1]
+                payload = decode_token(token)
+                # Lấy user_id, ép kiểu int nếu DB dùng int
+                user_id = payload.get("sub")
                 if user_id:
-                    # Lưu user_id vào biến toàn cục (ContextVar)
-                    # SQLAlchemy Listener sẽ đọc biến này
-                    set_current_user_id(int(user_id))
+                     set_current_user_id(int(user_id))
     except Exception as e:
-        # Nếu token lỗi hoặc hết hạn, ta cứ để user_id là None (Khách/Lỗi)
-        # Không được raise lỗi ở đây để tránh làm chết request
-        pass 
+        # Log lỗi token nếu cần thiết, nhưng không chặn request
+        # print(f"Auth Middleware Error: {e}")
+        pass
 
-    # c. Tiếp tục xử lý request (vào router, controller...)
     response = await call_next(request)
-    
-    # d. Dọn dẹp context sau khi request xong
-    user_id_context.reset(token)
-    
+    user_id_context.reset(token_ctx)
     return response
 # -------------------------------------------------------
 

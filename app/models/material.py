@@ -8,6 +8,7 @@ class Material(Base):
     # 1. Các trường cơ bản
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     material_code = Column(String(50), unique=True, index=True, nullable=False)
+    material_name = Column(String(200), nullable=True, index=True)
     material_type = Column(String(100), nullable=True)
 
     # 2. Thông số kỹ thuật
