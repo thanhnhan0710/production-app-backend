@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+# [THÊM] Import BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
@@ -10,6 +11,9 @@ from app.schemas.basket_schema import (
     BasketUpdate
 )
 from app.services import basket_service
+
+# --- [THÊM] Import ws_manager để gọi WebSocket ---
+from app.core.websockets import ws_manager
 
 router = APIRouter()
 
@@ -72,12 +76,18 @@ def read_basket(
 @router.post("/", response_model=BasketResponse)
 def create_basket(
     basket_in: BasketCreate,
+    background_tasks: BackgroundTasks, # [THÊM] BackgroundTasks
     db: Session = Depends(deps.get_db)
 ):
     """
     Tạo rổ mới. Mã rổ phải là duy nhất.
     """
-    return basket_service.create_basket(db, basket_in)
+    new_basket = basket_service.create_basket(db, basket_in)
+    
+    # [THÊM] Gửi tín hiệu báo cho Client tải lại danh sách Rổ
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_BASKETS")
+    
+    return new_basket
 
 # =========================
 # UPDATE
@@ -86,14 +96,18 @@ def create_basket(
 def update_basket(
     basket_id: int,
     basket_in: BasketUpdate,
+    background_tasks: BackgroundTasks, # [THÊM] BackgroundTasks
     db: Session = Depends(deps.get_db)
 ):
     """
     Cập nhật thông tin rổ. Nếu sửa mã rổ, sẽ check trùng.
     """
-    # Service đã handle logic check trùng và throw HTTPException rồi
-    # nên ở đây chỉ cần gọi hàm.
-    return basket_service.update_basket(db, basket_id, basket_in)
+    updated_basket = basket_service.update_basket(db, basket_id, basket_in)
+    
+    # [THÊM] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_BASKETS")
+    
+    return updated_basket
 
 # =========================
 # DELETE
@@ -101,9 +115,15 @@ def update_basket(
 @router.delete("/{basket_id}")
 def delete_basket(
     basket_id: int,
+    background_tasks: BackgroundTasks, # [THÊM] BackgroundTasks
     db: Session = Depends(deps.get_db)
 ):
     """
     Xóa rổ. Không thể xóa nếu rổ đang IN_USE.
     """
-    return basket_service.delete_basket(db, basket_id)
+    result = basket_service.delete_basket(db, basket_id)
+    
+    # [THÊM] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_BASKETS")
+    
+    return result

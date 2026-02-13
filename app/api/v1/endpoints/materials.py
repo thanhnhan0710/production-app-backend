@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks # [THÊM] BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -11,6 +11,9 @@ from app.schemas.material_schema import (
 )
 # Import service đã định nghĩa
 from app.services import material_service
+
+# --- [THÊM] Import ws_manager để gọi WebSocket ---
+from app.core.websockets import ws_manager
 
 router = APIRouter()
 
@@ -32,8 +35,6 @@ def read_materials(
 # =========================
 # SEARCH (Tìm kiếm)
 # =========================
-# Lưu ý: Đặt endpoint search TRƯỚC các endpoint dynamic /{id} 
-# để tránh conflict routing trong một số trường hợp.
 @router.get("/search", response_model=List[MaterialResponse])
 def search_materials(
     keyword: str,
@@ -55,6 +56,7 @@ def search_materials(
 @router.post("/", response_model=MaterialResponse, status_code=status.HTTP_201_CREATED)
 def create_material(
     material_in: MaterialCreate,
+    background_tasks: BackgroundTasks, # [THÊM] BackgroundTasks
     db: Session = Depends(deps.get_db)
 ):
     """
@@ -70,7 +72,12 @@ def create_material(
         )
 
     # 2. Tạo mới nếu mã hợp lệ
-    return material_service.create_material(db, material_in)
+    new_material = material_service.create_material(db, material_in)
+    
+    # [THÊM] Bắn tín hiệu WebSocket để các màn hình Danh mục vật tư tải lại dữ liệu
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_MATERIALS")
+    
+    return new_material
 
 
 # =========================
@@ -80,13 +87,12 @@ def create_material(
 def update_material(
     material_id: int,
     material_in: MaterialUpdate,
+    background_tasks: BackgroundTasks, # [THÊM] BackgroundTasks
     db: Session = Depends(deps.get_db)
 ):
     """
     Cập nhật thông tin vật tư theo ID.
     """
-    # Nếu user muốn sửa code, cũng nên check trùng code ở đây (Logic nâng cao),
-    # ở mức cơ bản ta gọi service update.
     updated_material = material_service.update_material(
         db, material_id, material_in
     )
@@ -96,6 +102,9 @@ def update_material(
             status_code=status.HTTP_404_NOT_FOUND, 
             detail="Material not found"
         )
+    
+    # [THÊM] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_MATERIALS")
         
     return updated_material
 
@@ -106,6 +115,7 @@ def update_material(
 @router.delete("/{material_id}")
 def delete_material(
     material_id: int,
+    background_tasks: BackgroundTasks, # [THÊM] BackgroundTasks
     db: Session = Depends(deps.get_db)
 ):
     """
@@ -118,5 +128,8 @@ def delete_material(
             status_code=status.HTTP_404_NOT_FOUND, 
             detail="Material not found"
         )
+    
+    # [THÊM] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_MATERIALS")
         
     return {"message": "Deleted successfully"}

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks # [THÊM] BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
@@ -9,6 +9,9 @@ from app.schemas.dye_color_schema import (
     DyeColorUpdate
 )
 from app.services import dye_color_service
+
+# --- [THÊM] Import ws_manager để gọi WebSocket ---
+from app.core.websockets import ws_manager
 
 router = APIRouter()
 
@@ -71,12 +74,18 @@ def read_dye_color(
 @router.post("/", response_model=DyeColorResponse)
 def create_dye_color(
     color_in: DyeColorCreate,
+    background_tasks: BackgroundTasks, # [THÊM] BackgroundTasks
     db: Session = Depends(deps.get_db)
 ):
     """
     Create a new dye color. Checks for duplicate Hex Code.
     """
-    return dye_color_service.create_dye_color(db, color_in)
+    new_color = dye_color_service.create_dye_color(db, color_in)
+    
+    # [THÊM] Bắn tín hiệu WebSocket để các máy khác cập nhật danh sách màu nhuộm
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_DYE_COLORS")
+    
+    return new_color
 
 
 # =========================
@@ -86,13 +95,19 @@ def create_dye_color(
 def update_dye_color(
     color_id: int,
     color_in: DyeColorUpdate,
+    background_tasks: BackgroundTasks, # [THÊM] BackgroundTasks
     db: Session = Depends(deps.get_db)
 ):
     """
     Update dye color info. Checks for duplicate Hex Code if changed.
     """
     # Service raises HTTPException 404 or 409 internally
-    return dye_color_service.update_dye_color(db, color_id, color_in)
+    updated_color = dye_color_service.update_dye_color(db, color_id, color_in)
+    
+    # [THÊM] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_DYE_COLORS")
+    
+    return updated_color
 
 
 # =========================
@@ -101,9 +116,15 @@ def update_dye_color(
 @router.delete("/{color_id}")
 def delete_dye_color(
     color_id: int,
+    background_tasks: BackgroundTasks, # [THÊM] BackgroundTasks
     db: Session = Depends(deps.get_db)
 ):
     """
     Delete a dye color.
     """
-    return dye_color_service.delete_dye_color(db, color_id)
+    result = dye_color_service.delete_dye_color(db, color_id)
+    
+    # [THÊM] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_DYE_COLORS")
+    
+    return result

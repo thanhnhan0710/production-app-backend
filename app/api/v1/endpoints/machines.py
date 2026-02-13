@@ -1,7 +1,8 @@
 import os
 import shutil
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form
+# [THÊM] Import BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.schemas.machine_log_schema import MachineLogResponse
@@ -12,6 +13,9 @@ from app.schemas.machine_schema import (
     MachineUpdate,
 )
 from app.services import machine_service
+
+# --- [THÊM] Import ws_manager để gọi WebSocket ---
+from app.core.websockets import ws_manager
 
 router = APIRouter()
 
@@ -37,9 +41,15 @@ def read_machines(
 @router.post("/", response_model=MachineResponse)
 def create_machine(
     machine: MachineCreate,
+    background_tasks: BackgroundTasks, # [THÊM] BackgroundTasks
     db: Session = Depends(deps.get_db)
 ):
-    return machine_service.create_machine(db, machine)
+    new_machine = machine_service.create_machine(db, machine)
+    
+    # [THÊM] Gửi tín hiệu báo cho tất cả máy tính/tablet tải lại danh sách Máy
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_MACHINES")
+    
+    return new_machine
 
 
 # =========================
@@ -49,6 +59,7 @@ def create_machine(
 def update_machine(
     machine_id: int,
     machine: MachineUpdate,
+    background_tasks: BackgroundTasks, # [THÊM] BackgroundTasks
     db: Session = Depends(deps.get_db)
 ):
     updated_machine = machine_service.update_machine(
@@ -56,6 +67,10 @@ def update_machine(
     )
     if not updated_machine:
         raise HTTPException(status_code=404, detail="Machine not found")
+        
+    # [THÊM] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_MACHINES")
+    
     return updated_machine
 
 
@@ -65,11 +80,16 @@ def update_machine(
 @router.delete("/{machine_id}")
 def delete_machine(
     machine_id: int,
+    background_tasks: BackgroundTasks, # [THÊM] BackgroundTasks
     db: Session = Depends(deps.get_db)
 ):
     success = machine_service.delete_machine(db, machine_id)
     if not success:
         raise HTTPException(status_code=404, detail="Machine not found")
+        
+    # [THÊM] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_MACHINES")
+    
     return {"message": "Deleted successfully"}
 
 
@@ -98,6 +118,7 @@ def search_machines(
 @router.put("/{machine_id}/status", response_model=MachineResponse)
 def update_machine_status_endpoint(
     machine_id: int,
+    background_tasks: BackgroundTasks, # [THÊM] BackgroundTasks
     # Sử dụng Form và File để nhận dữ liệu Multipart
     status: str = Form(...),
     reason: Optional[str] = Form(None),
@@ -143,6 +164,9 @@ def update_machine_status_endpoint(
     
     if not updated_machine:
         raise HTTPException(status_code=404, detail="Machine not found")
+        
+    # [THÊM] Bắn tín hiệu thay đổi trạng thái máy đến tất cả các màn hình Dashboard
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_MACHINES")
         
     return updated_machine
 

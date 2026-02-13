@@ -8,7 +8,8 @@ class MachineStatus(str, enum.Enum):
     STOPPED = "STOPPED"          
     RUNNING = "RUNNING"          
     MAINTENANCE = "MAINTENANCE"  
-    SPINNING = "SPINNING"       
+    SPINNING = "SPINNING"
+    YARNOUT ="YARNOUT"    
 
 # 2. [MỚI] Định nghĩa các Khu vực (Area)
 class MachineArea(str, enum.Enum):
