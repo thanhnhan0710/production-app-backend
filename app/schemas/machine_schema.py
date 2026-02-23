@@ -7,9 +7,12 @@ class MachineBase(BaseModel):
     total_lines: Optional[int] = None
     purpose: Optional[str] = None
     
-    # Sử dụng Enum để validate input chặt chẽ
+    # [MỚI THÊM]
+    serial_number: Optional[str] = None
+    speed: Optional[int] = None
+    
     status: MachineStatus = MachineStatus.STOPPED 
-    area: Optional[MachineArea] = None 
+    area: Optional[MachineArea] = None
 
 class MachineCreate(MachineBase):
     pass

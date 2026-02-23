@@ -1,4 +1,6 @@
 from datetime import datetime
+from fastapi import UploadFile
+import pandas as pd
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from app.models.machine import Machine, MachineStatus, MachineArea
@@ -175,3 +177,76 @@ def get_machine_history(db: Session, machine_id: int, limit: int = 20):
         .order_by(MachineLog.start_time.desc())\
         .limit(limit)\
         .all()
+
+# =========================
+# GET BY NAME (Tiện ích check trùng)
+# =========================
+def get_machine_by_name(db: Session, machine_name: str):
+    return db.query(Machine).filter(Machine.machine_name == machine_name).first()
+
+# =========================
+# EXCEL IMPORT
+# =========================
+def import_machines_from_excel(db: Session, file: UploadFile):
+    try:
+        # header=1 vì dòng 1 là Title "Thông tin máy dệt cơ bản", dòng 2 mới là cột
+        df = pd.read_excel(file.file, header=1)
+        df = df.where(pd.notnull(df), None)
+    except Exception as e:
+        return {"status": False, "message": f"Lỗi đọc file Excel: {str(e)}"}
+
+    success_count = 0
+    error_rows = []
+
+    # Lấy danh sách các giá trị hợp lệ của Khu vực (Enum)
+    valid_areas = [e.value for e in MachineArea]
+
+    for index, row in df.iterrows():
+        excel_row_num = index + 3 # Dòng thực tế trên file Excel
+
+        machine_name = str(row.get('MACHINE NAME', '')).strip()
+        if not machine_name or machine_name == 'None':
+            continue
+
+        # 1. Kiểm tra trùng lặp tên máy
+        if get_machine_by_name(db, machine_name):
+            error_rows.append(f"Dòng {excel_row_num}: Máy '{machine_name}' đã tồn tại.")
+            continue
+
+        # 2. Xử lý Enum Khu Vực
+        area_str = str(row.get('AREA', '')).strip()
+        area_val = area_str if area_str in valid_areas else None
+
+        # 3. Ép kiểu dữ liệu an toàn
+        try:
+            lines_val = row.get('TOTAL LINE')
+            total_lines = int(float(lines_val)) if pd.notnull(lines_val) and str(lines_val).strip() != '' else None
+
+            speed_val = row.get('MAX SPEED (round/ minute)')
+            speed = int(float(speed_val)) if pd.notnull(speed_val) and str(speed_val).strip() != '' else None
+
+            serial_val = str(row.get('SERI NUMBER', '')).strip()
+            serial_number = serial_val if serial_val != 'None' and serial_val != '' else None
+
+            # 4. Insert DB
+            new_machine = Machine(
+                machine_name=machine_name,
+                total_lines=total_lines,
+                serial_number=serial_number,
+                speed=speed,
+                area=area_val,
+                status=MachineStatus.STOPPED # Mặc định máy mới là STOPPED
+            )
+            db.add(new_machine)
+            success_count += 1
+            
+        except Exception as e:
+            error_rows.append(f"Dòng {excel_row_num}: Lỗi định dạng dữ liệu ({str(e)})")
+
+    db.commit()
+    
+    return {
+        "status": True, 
+        "success_count": success_count, 
+        "errors": error_rows
+    }

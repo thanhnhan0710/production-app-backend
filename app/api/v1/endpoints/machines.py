@@ -186,3 +186,27 @@ def read_machine_history(
         return []
         
     return history_logs
+
+# =========================
+# IMPORT EXCEL
+# =========================
+@router.post("/import", status_code=200)
+def import_excel(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    db: Session = Depends(deps.get_db)
+):
+    """
+    Upload file Excel để import danh sách máy móc.
+    """
+    if not file.filename.endswith(('.xls', '.xlsx')):
+        raise HTTPException(status_code=400, detail="Chỉ chấp nhận định dạng .xls hoặc .xlsx")
+        
+    result = machine_service.import_machines_from_excel(db, file)
+    
+    if result.get("status"):
+        if result.get("success_count", 0) > 0:
+            background_tasks.add_task(ws_manager.broadcast, "REFRESH_MACHINES")
+        return result
+    else:
+        raise HTTPException(status_code=400, detail=result.get("message"))

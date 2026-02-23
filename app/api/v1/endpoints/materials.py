@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks # [THÊM] BackgroundTasks
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status, BackgroundTasks # [THÊM] BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
+from fastapi.responses import StreamingResponse
 
 from app.api import deps
 # Import schemas đã định nghĩa
@@ -133,3 +134,48 @@ def delete_material(
     background_tasks.add_task(ws_manager.broadcast, "REFRESH_MATERIALS")
         
     return {"message": "Deleted successfully"}
+
+# =========================
+# IMPORT EXCEL
+# =========================
+@router.post("/import", status_code=status.HTTP_200_OK)
+def import_excel(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    db: Session = Depends(deps.get_db)
+):
+    """
+    Upload file Excel để import danh sách vật tư.
+    """
+    if not file.filename.endswith(('.xls', '.xlsx')):
+        raise HTTPException(status_code=400, detail="Chỉ chấp nhận định dạng .xls hoặc .xlsx")
+        
+    result = material_service.import_materials_from_excel(db, file)
+    
+    if result.get("status"):
+        # [QUAN TRỌNG] Bắn tín hiệu WebSocket để UI tự tải lại danh sách
+        if result.get("success_count", 0) > 0:
+            background_tasks.add_task(ws_manager.broadcast, "REFRESH_MATERIALS")
+        return result
+    else:
+        raise HTTPException(status_code=400, detail=result.get("message"))
+
+# =========================
+# EXPORT EXCEL
+# =========================
+@router.get("/export", status_code=status.HTTP_200_OK)
+def export_excel(db: Session = Depends(deps.get_db)):
+    """
+    Tải xuống file Excel danh sách vật tư
+    """
+    output = material_service.export_materials_to_excel(db)
+    
+    headers = {
+        'Content-Disposition': 'attachment; filename="YARN.xlsx"'
+    }
+    
+    return StreamingResponse(
+        output, 
+        headers=headers, 
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
