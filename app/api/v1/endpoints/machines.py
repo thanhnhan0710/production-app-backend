@@ -3,6 +3,7 @@ import shutil
 import uuid
 # [THÊM] Import BackgroundTasks
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.schemas.machine_log_schema import MachineLogResponse
@@ -210,3 +211,23 @@ def import_excel(
         return result
     else:
         raise HTTPException(status_code=400, detail=result.get("message"))
+    
+# =========================
+# EXPORT EXCEL
+# =========================
+@router.get("/export", status_code=200)
+def export_excel(db: Session = Depends(deps.get_db)):
+    """
+    Tải xuống file Excel danh sách máy móc.
+    """
+    output = machine_service.export_machines_to_excel(db)
+    
+    headers = {
+        'Content-Disposition': 'attachment; filename="Machines.xlsx"'
+    }
+    
+    return StreamingResponse(
+        output, 
+        headers=headers, 
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )

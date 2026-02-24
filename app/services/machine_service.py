@@ -1,5 +1,6 @@
 from datetime import datetime
 from fastapi import UploadFile
+from io import BytesIO
 import pandas as pd
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -189,9 +190,16 @@ def get_machine_by_name(db: Session, machine_name: str):
 # =========================
 def import_machines_from_excel(db: Session, file: UploadFile):
     try:
-        # header=1 vì dòng 1 là Title "Thông tin máy dệt cơ bản", dòng 2 mới là cột
+        # header=1 vì dòng 1 là Title "WEAVING MACHINE INFOMATION", dòng 2 mới là cột Header
         df = pd.read_excel(file.file, header=1)
+        
+        # [QUAN TRỌNG] Xóa khoảng trắng thừa ở đầu/cuối của tất cả các Tên Cột
+        # Đề phòng trường hợp file Excel gõ nhầm "MACHINE NAME " (dư 1 dấu cách)
+        df.columns = df.columns.str.strip()
+        
+        # Thay thế các ô trống (NaN) thành None
         df = df.where(pd.notnull(df), None)
+        
     except Exception as e:
         return {"status": False, "message": f"Lỗi đọc file Excel: {str(e)}"}
 
@@ -204,9 +212,10 @@ def import_machines_from_excel(db: Session, file: UploadFile):
     for index, row in df.iterrows():
         excel_row_num = index + 3 # Dòng thực tế trên file Excel
 
+        # Lấy tên máy
         machine_name = str(row.get('MACHINE NAME', '')).strip()
         if not machine_name or machine_name == 'None':
-            continue
+            continue # Bỏ qua dòng trống
 
         # 1. Kiểm tra trùng lặp tên máy
         if get_machine_by_name(db, machine_name):
@@ -250,3 +259,32 @@ def import_machines_from_excel(db: Session, file: UploadFile):
         "success_count": success_count, 
         "errors": error_rows
     }
+
+# =========================
+# EXCEL EXPORT
+# =========================
+def export_machines_to_excel(db: Session):
+    machines = db.query(Machine).all()
+
+    # Tạo data map với các cột chuẩn theo mẫu Excel "WEAVING MACHINE INFOMATION" của bạn
+    data = []
+    for m in machines:
+        data.append({
+            "MACHINE NAME": m.machine_name,
+            "TOTAL LINE": m.total_lines,
+            "SERI NUMBER": m.serial_number,
+            "MAX SPEED (round/ minute)": m.speed,
+            "AREA": m.area.value if m.area else "",  # Lấy giá trị chuỗi của Enum (VD: "Khu A")
+            "PURPOSE": m.purpose,
+            "STATUS": m.status.value if m.status else ""
+        })
+
+    df = pd.DataFrame(data)
+    
+    # Chuẩn hóa file Excel trên RAM (không lưu xuống ổ cứng)
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Machines')
+
+    output.seek(0)
+    return output

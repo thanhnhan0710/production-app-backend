@@ -1,10 +1,15 @@
+import pandas as pd
+
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, desc
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 from typing import List, Optional
-from datetime import date
+from datetime import date, datetime
 
+from app.models.import_declaration import ImportDeclaration, ImportDeclarationDetail, ImportType
+from app.models.material import Material
 from app.models.purchase_order import PurchaseOrderHeader, PurchaseOrderDetail, POStatus
+from app.models.supplier import Supplier
 from app.schemas.purchase_order_schema import POHeaderCreate, POHeaderUpdate, PODetailCreate
 
 class PurchaseOrderService:
@@ -255,3 +260,160 @@ class PurchaseOrderService:
         self.db.delete(db_obj)
         self.db.commit()
         return {"message": "Đã xóa đơn hàng thành công."}
+    # =================================================================
+    # TÍNH NĂNG IMPORT EXCEL (XỬ LÝ DỮ LIỆU GỘP Ô & MULTI-TABLE)
+    # =================================================================
+    def import_po_and_declaration_from_excel(self, file: UploadFile):
+        try:
+            # Đọc file Excel, giả sử dòng 1 là tiêu đề
+            df = pd.read_excel(file.file)
+            
+            # Làm sạch tên cột (xóa khoảng trắng, ký tự xuống dòng)
+            df.columns = df.columns.str.replace('\n', ' ').str.strip()
+            
+            # [QUAN TRỌNG] Xử lý Merge Cells bằng Forward Fill (Điền giá trị từ trên xuống cho các ô bị gộp)
+            cols_to_ffill = ['Supplier', 'PO', 'Incoterm', 'ETA', 'Invoice No.', 'Inv date', 'Declaration No.', 'Declaration Date']
+            for col in cols_to_ffill:
+                if col in df.columns:
+                    df[col] = df[col].ffill()
+
+            # Đổi NaN thành None
+            df = df.where(pd.notnull(df), None)
+            
+        except Exception as e:
+            return {"status": False, "message": f"Lỗi đọc file Excel: {str(e)}"}
+
+        success_po = 0
+        success_decl = 0
+        error_rows = []
+
+        # Hàm tiện ích ép kiểu an toàn
+        def safe_float(val):
+            try: return float(val) if val is not None else 0.0
+            except: return 0.0
+            
+        def safe_date(val):
+            if pd.isnull(val) or val is None: return None
+            if isinstance(val, datetime): return val.date()
+            try: return pd.to_datetime(val).date()
+            except: return None
+
+        for index, row in df.iterrows():
+            excel_row = index + 2
+            
+            po_number = str(row.get('PO', '')).strip()
+            item_code = str(row.get('Item Code', '')).strip()
+
+            # Bỏ qua dòng trống
+            if not po_number or po_number == 'None' or not item_code or item_code == 'None':
+                continue
+
+            # ---------------------------------------------------------
+            # 1. XỬ LÝ SUPPLIER & MATERIAL
+            # ---------------------------------------------------------
+            supplier_name = str(row.get('Supplier', '')).strip()
+            supplier = self.db.query(Supplier).filter(Supplier.supplier_name.ilike(f"%{supplier_name}%")).first()
+            if not supplier:
+                # Tự động tạo Supplier nếu chưa có
+                supplier = Supplier(supplier_name=supplier_name, supplier_code=supplier_name[:10].upper())
+                self.db.add(supplier)
+                self.db.flush()
+
+            material = self.db.query(Material).filter(Material.material_code == item_code).first()
+            if not material:
+                error_rows.append(f"Dòng {excel_row}: Mã vật tư '{item_code}' không tồn tại trong hệ thống.")
+                continue
+
+            # ---------------------------------------------------------
+            # 2. XỬ LÝ ĐƠN ĐẶT HÀNG (PURCHASE ORDER)
+            # ---------------------------------------------------------
+            eta_date = safe_date(row.get('ETA'))
+            
+            po_header = self.get_by_number(po_number)
+            if not po_header:
+                # Tạo mới PO Header
+                po_header = PurchaseOrderHeader(
+                    po_number=po_number,
+                    vendor_id=supplier.supplier_id,
+                    expected_arrival_date=eta_date,
+                    status=POStatus.COMPLETED, # Nhập từ Excel thường là hàng đã về
+                    total_amount=0.0
+                )
+                self.db.add(po_header)
+                self.db.flush()
+                success_po += 1
+
+            # Trích xuất số liệu PO Detail
+            qty_kg = safe_float(row.get("PO Q'ty KG"))
+            price = safe_float(row.get("Price/kg (CIF/USD)", row.get("Price/kg")))
+            qty_rolls = int(safe_float(row.get("Q'ty Delivery Bobbin")))
+            
+            # Thêm PO Detail (Chỉ thêm nếu chưa có material này trong PO)
+            existing_po_detail = self.db.query(PurchaseOrderDetail).filter(
+                PurchaseOrderDetail.po_id == po_header.po_id,
+                PurchaseOrderDetail.material_id == material.id
+            ).first()
+
+            if not existing_po_detail:
+                line_total = qty_kg * price
+                po_detail = PurchaseOrderDetail(
+                    po_id=po_header.po_id,
+                    material_id=material.id,
+                    quantity=qty_kg,
+                    quantity_rolls=qty_rolls,
+                    unit_price=price,
+                    line_total=line_total,
+                    received_quantity=qty_kg, # Hàng đã về
+                    received_rolls=qty_rolls
+                )
+                self.db.add(po_detail)
+                po_header.total_amount += line_total
+                self.db.flush()
+            else:
+                po_detail = existing_po_detail
+
+            # ---------------------------------------------------------
+            # 3. XỬ LÝ TỜ KHAI HẢI QUAN (IMPORT DECLARATION)
+            # ---------------------------------------------------------
+            decl_no = str(row.get('Declaration No.', '')).strip()
+            
+            if decl_no and decl_no != 'None':
+                decl_date = safe_date(row.get('Declaration Date')) or date.today()
+                invoice_no = str(row.get('Invoice No.', '')).strip()
+                
+                # Check tờ khai đã tồn tại chưa
+                decl_header = self.db.query(ImportDeclaration).filter(ImportDeclaration.declaration_no == decl_no).first()
+                if not decl_header:
+                    decl_header = ImportDeclaration(
+                        declaration_no=decl_no,
+                        declaration_date=decl_date,
+                        invoice_no=invoice_no if invoice_no != 'None' else None,
+                        type_of_import=ImportType.E31 # Giả định E31
+                    )
+                    self.db.add(decl_header)
+                    self.db.flush()
+                    success_decl += 1
+
+                # Thêm Declaration Detail
+                existing_decl_detail = self.db.query(ImportDeclarationDetail).filter(
+                    ImportDeclarationDetail.declaration_id == decl_header.id,
+                    ImportDeclarationDetail.material_id == material.id
+                ).first()
+
+                if not existing_decl_detail:
+                    decl_detail = ImportDeclarationDetail(
+                        declaration_id=decl_header.id,
+                        material_id=material.id,
+                        po_detail_id=po_detail.detail_id, # Link với PO Detail vừa tạo
+                        quantity=qty_kg,
+                        unit_price=price
+                    )
+                    self.db.add(decl_detail)
+
+        self.db.commit()
+        return {
+            "status": True, 
+            "success_po": success_po, 
+            "success_decl": success_decl,
+            "errors": error_rows
+        }

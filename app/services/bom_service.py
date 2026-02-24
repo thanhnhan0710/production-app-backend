@@ -1,10 +1,12 @@
+import pandas as pd
+from io import BytesIO
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, and_, func  # [QUAN TRỌNG] Thêm func để dùng hàm SUM, MAX
-from fastapi import HTTPException
-
+from fastapi import HTTPException, UploadFile
+from fastapi import UploadFile
 # Import Models
 from app.models.bom_header import BOMHeader
-from app.models.bom_detail import BOMDetail
+from app.models.bom_detail import BOMComponentType, BOMDetail
 from app.models.product import Product
 
 # Import Schemas
@@ -274,3 +276,284 @@ class BOMService:
         result.sort(key=lambda x: x['material_name'])
         
         return result
+    
+# =================================================================
+    # TÍNH NĂNG IMPORT FILE EXCEL (XỬ LÝ CẤU TRÚC PHỨC TẠP)
+    # =================================================================
+    @staticmethod
+    def import_bom_from_excel(db: Session, file: UploadFile, applicable_year: int):
+        try:
+            # Đọc toàn bộ file Excel (lấy danh sách các sheet)
+            xls = pd.ExcelFile(file.file)
+        except Exception as e:
+            return {"status": False, "message": f"Lỗi đọc file Excel: {str(e)}"}
+
+        success_count = 0
+        error_logs = []
+
+        # Duyệt qua từng Sheet (Mỗi sheet là 1 BOM của 1 Sản phẩm)
+        for sheet_name in xls.sheet_names:
+            # Đọc không lấy header để có thể quét tự do toàn bộ bảng
+            df = pd.read_excel(xls, sheet_name=sheet_name, header=None)
+            
+            # Khởi tạo giá trị mặc định cho Header
+            item_code = None
+            width_behind_loom = 0.0
+            picks = 0
+            target_weight_gm = 0.0
+            scrap = 0.0
+            shrinkage = 0.0
+            
+            detail_start_row = -1
+
+            # Hàm tiện ích parse số an toàn
+            def parse_float(val):
+                if pd.isnull(val) or str(val).strip() in ['', 'nan']: return 0.0
+                val_str = str(val).replace('%', '').strip()
+                try: 
+                    num = float(val_str)
+                    # Nếu pandas đọc 5% thành 0.05 -> nhân 100 để lưu 5.0 vào database
+                    if num > 0 and num < 1 and '%' not in str(val):
+                        num *= 100 
+                    return num
+                except: return 0.0
+
+            # ---------------------------------------------------------
+            # BƯỚC 1: QUÉT TỌA ĐỘ ĐỂ LẤY THÔNG SỐ HEADER
+            # ---------------------------------------------------------
+            for row_idx in range(len(df)):
+                # Chuyển row thành list string in thường để dễ search
+                row_values = [str(x).strip().lower() if pd.notnull(x) else "" for x in df.iloc[row_idx].values]
+                
+                # Tìm mã sản phẩm (Bên cạnh chữ "article")
+                if "article" in row_values:
+                    col_idx = row_values.index("article")
+                    for c in range(col_idx + 1, len(row_values)):
+                        if row_values[c]:
+                            item_code = str(df.iloc[row_idx, c]).strip()
+                            break
+                            
+                # Tìm Width behind loom
+                if "width behind loom" in row_values:
+                    col_idx = row_values.index("width behind loom")
+                    for c in range(col_idx + 1, len(row_values)):
+                        if row_values[c]:
+                            width_behind_loom = parse_float(df.iloc[row_idx, c])
+                            break
+                            
+                # Tìm Pics
+                if "pics" in row_values:
+                    col_idx = row_values.index("pics")
+                    for c in range(col_idx + 1, len(row_values)):
+                        if row_values[c]:
+                            picks = int(parse_float(df.iloc[row_idx, c]))
+                            break
+                            
+                # Tìm Target Weight (Chữ "weight (g/m)" nằm trên, giá trị nằm ngay ô bên dưới)
+                if "weight (g/m)" in row_values:
+                    col_idx = row_values.index("weight (g/m)")
+                    target_weight_gm = parse_float(df.iloc[row_idx + 1, col_idx])
+                        
+                # Tìm Scrap & Shrinkage
+                if "scrap" in row_values:
+                    col_idx = row_values.index("scrap")
+                    for c in range(col_idx + 1, len(row_values)):
+                        if row_values[c]:
+                            scrap = parse_float(df.iloc[row_idx, c])
+                            break
+                            
+                if "shrinkage" in row_values:
+                    col_idx = row_values.index("shrinkage")
+                    for c in range(col_idx + 1, len(row_values)):
+                        if row_values[c]:
+                            shrinkage = parse_float(df.iloc[row_idx, c])
+                            break
+
+                # Xác định dòng bắt đầu của bảng chi tiết (Dòng chứa chữ "threads" và "type")
+                if "threads" in row_values and "type" in row_values:
+                    detail_start_row = row_idx + 1
+
+            # Validate Product
+            if not item_code:
+                # Nếu không thấy chữ Article, lấy tên Sheet làm mã sản phẩm
+                item_code = sheet_name.strip()
+                
+            product = db.query(Product).filter(Product.item_code == item_code).first()
+            if not product:
+                error_logs.append(f"Sheet '{sheet_name}': Không tìm thấy Sản phẩm mã '{item_code}' trong hệ thống.")
+                continue
+
+            # Validate BOM tồn tại
+            existing_bom = db.query(BOMHeader).filter(
+                BOMHeader.product_id == product.product_id,
+                BOMHeader.applicable_year == applicable_year
+            ).first()
+            
+            if existing_bom:
+                error_logs.append(f"Sheet '{sheet_name}': Sản phẩm '{item_code}' đã có BOM cho năm {applicable_year}.")
+                continue
+
+            # ---------------------------------------------------------
+            # BƯỚC 2: QUÉT BẢNG CHI TIẾT SỢI (DETAILS)
+            # ---------------------------------------------------------
+            details = []
+            if detail_start_row != -1:
+                # Lấy dòng tiêu đề để xác định cột
+                header_row = [str(x).strip().lower() if pd.notnull(x) else "" for x in df.iloc[detail_start_row - 1].values]
+                
+                col_threads = header_row.index("threads") if "threads" in header_row else 1
+                col_type = header_row.index("type") if "type" in header_row else 3
+                col_twist = header_row.index("twisted") if "twisted" in header_row else 5
+                col_cross = header_row.index("crossweave") if "crossweave" in header_row else 6
+                
+                # Cột Actual (cm)
+                col_actual = -1
+                for idx, val in enumerate(header_row):
+                    if "actual (cm)" in val or "actual(cm)" in val or "actual" in val:
+                        col_actual = idx
+                        break
+                if col_actual == -1: col_actual = 8 # Mặc định cột I
+                
+                # Quét từng dòng dữ liệu
+                for r in range(detail_start_row, len(df)):
+                    comp_type_raw = str(df.iloc[r, 0]).strip() # Cột A
+                    
+                    # Dừng lại nếu gặp dòng Scrap/Shrinkage/Total ở cuối bảng
+                    if comp_type_raw.lower() in ['scrap', 'shrinkage', 'total', 'nan', '']:
+                        # Xác nhận thêm nếu cột Threads cũng rỗng thì chắc chắn là dừng
+                        if pd.isnull(df.iloc[r, col_threads]):
+                            break
+
+                    type_name = str(df.iloc[r, col_type]).strip()
+                    if type_name in ['nan', 'None', '']:
+                        continue # Bỏ qua dòng trống
+
+                    threads = int(parse_float(df.iloc[r, col_threads]))
+                    twisted = parse_float(df.iloc[r, col_twist])
+                    if twisted == 0: twisted = 1.0 # Twist mặc định là 1
+                    
+                    crossweave = parse_float(df.iloc[r, col_cross])
+                    actual_cm = parse_float(df.iloc[r, col_actual])
+
+                    # Map Component Type linh hoạt
+                    c_type = BOMComponentType.GROUND
+                    comp_lower = comp_type_raw.lower()
+                    if "grd. marker" in comp_lower or "grd marker" in comp_lower: c_type = BOMComponentType.GRD_MARKER
+                    elif "edge" in comp_lower: c_type = BOMComponentType.EDGE
+                    elif "binder" in comp_lower: c_type = BOMComponentType.BINDER
+                    elif "stuffer marker" in comp_lower: c_type = BOMComponentType.STUFFER_MAKER
+                    elif "stuffer" in comp_lower: c_type = BOMComponentType.STUFFER
+                    elif "lock" in comp_lower: c_type = BOMComponentType.LOCK
+                    elif "catch cord" in comp_lower: c_type = BOMComponentType.CATCH_CORD
+                    elif "2nd filling" in comp_lower: c_type = BOMComponentType.SECOND_FILLING
+                    elif "filling" in comp_lower or "weft" in comp_lower: c_type = BOMComponentType.FILLING
+
+                    details.append(BOMDetailCreate(
+                        component_type=c_type,
+                        material_id=1, # Tạm gán 1, Backend sẽ tự map nếu có logic sau này
+                        threads=threads,
+                        yarn_type_name=type_name,
+                        twisted=twisted,
+                        crossweave_rate=crossweave,
+                        actual_length_cm=actual_cm
+                    ))
+            
+            if len(details) == 0:
+                error_logs.append(f"Sheet '{sheet_name}': Không tìm thấy chi tiết sợi nào hợp lệ.")
+                continue
+
+            # ---------------------------------------------------------
+            # BƯỚC 3: GỌI LẠI LOGIC TẠO BOM (TỰ ĐỘNG TÍNH TOÁN)
+            # ---------------------------------------------------------
+            bom_create_data = BOMHeaderCreate(
+                product_id=product.product_id,
+                applicable_year=applicable_year,
+                target_weight_gm=target_weight_gm,
+                total_scrap_rate=scrap,
+                total_shrinkage_rate=shrinkage,
+                width_behind_loom=width_behind_loom,
+                picks=picks,
+                details=details
+            )
+            
+            try:
+                # Tận dụng luôn hàm create_bom đã viết để tự động chạy _execute_bom_calculations
+                BOMService.create_bom(db, bom_create_data)
+                success_count += 1
+            except Exception as e:
+                error_logs.append(f"Sheet '{sheet_name}': Lỗi khi tạo BOM ({str(e)})")
+
+        return {"status": True, "success_count": success_count, "errors": error_logs}
+    
+# =================================================================
+    # XUẤT FILE EXCEL
+    # =================================================================
+    @staticmethod
+    def export_boms_to_excel(db: Session):
+        # Lấy toàn bộ BOM, join với Product và load kèm bom_details
+        boms = db.query(BOMHeader).options(
+            joinedload(BOMHeader.product),
+            joinedload(BOMHeader.bom_details)
+        ).all()
+
+        data = []
+        for bom in boms:
+            product_code = bom.product.item_code if bom.product else "Unknown"
+            
+            # Nếu BOM không có chi tiết sợi, in ra 1 dòng cơ bản
+            if not bom.bom_details:
+                data.append({
+                    "Year": bom.applicable_year,
+                    "Product Code": product_code,
+                    "Target Weight (g/m)": bom.target_weight_gm,
+                    "Width (mm)": bom.width_behind_loom,
+                    "Picks": bom.picks,
+                    "Scrap (%)": bom.total_scrap_rate,
+                    "Shrinkage (%)": bom.total_shrinkage_rate,
+                    "Component Type": "",
+                    "Material / Yarn Name": "",
+                    "Threads": 0,
+                    "Dtex": 0,
+                    "Twist": 0,
+                    "Crossweave (%)": 0,
+                    "Actual Length (cm)": 0,
+                    "Actual Cal (g/m)": 0,
+                    "Ratio (%)": 0,
+                    "BOM (g/m)": 0,
+                })
+                continue
+
+            # Nạp chi tiết sợi vào mảng
+            for detail in bom.bom_details:
+                # Ép kiểu an toàn cho Enum
+                comp_type = detail.component_type.value if hasattr(detail.component_type, 'value') else str(detail.component_type)
+                
+                data.append({
+                    "Year": bom.applicable_year,
+                    "Product Code": product_code,
+                    "Target Weight (g/m)": bom.target_weight_gm,
+                    "Width (mm)": bom.width_behind_loom,
+                    "Picks": bom.picks,
+                    "Scrap (%)": bom.total_scrap_rate,
+                    "Shrinkage (%)": bom.total_shrinkage_rate,
+                    "Component Type": comp_type,
+                    "Material / Yarn Name": detail.yarn_type_name,
+                    "Threads": detail.threads,
+                    "Dtex": detail.yarn_dtex,
+                    "Twist": detail.twisted,
+                    "Crossweave (%)": detail.crossweave_rate,
+                    "Actual Length (cm)": detail.actual_length_cm,
+                    "Actual Cal (g/m)": detail.actual_weight_cal,
+                    "Ratio (%)": detail.weight_percentage,
+                    "BOM (g/m)": detail.bom_gm,
+                })
+
+        df = pd.DataFrame(data)
+        
+        # Ghi ra bộ nhớ ảo
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='BOM_Master_Data')
+
+        output.seek(0)
+        return output

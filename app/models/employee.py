@@ -7,7 +7,7 @@ class Employee(Base):
 
     employee_id = Column(Integer, primary_key=True, index=True)
     full_name = Column(String(100), nullable=False)
-    email = Column(String(100), unique=True, index=True, nullable=False)
+    email = Column(String(100), unique=True, index=True, nullable=True)
     phone = Column(String(20), nullable=True)
     address = Column(String(150), nullable=True)
     position = Column(String(100), nullable=True)

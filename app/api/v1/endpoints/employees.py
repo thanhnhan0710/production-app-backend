@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 from typing import List
-
+from app.core.websockets import ws_manager # [MỚI] Import WebSocket
+from fastapi.responses import StreamingResponse
 from app.api import deps
 from app.schemas.employee_schema import EmployeeResponse, EmployeeCreate, EmployeeUpdate
 from app.services import employee_service
@@ -48,3 +49,50 @@ def search_employees(
     db: Session = Depends(deps.get_db)
 ):
     return employee_service.search_employees(db, keyword, skip, limit)
+
+# =========================
+# IMPORT EXCEL
+# =========================
+@router.post("/import", status_code=200)
+def import_excel(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    db: Session = Depends(deps.get_db)
+):
+    """
+    Upload file Excel để import danh sách Nhân viên.
+    Tự động tạo mới Phòng ban nếu phòng ban trong file chưa tồn tại.
+    """
+    if not file.filename.endswith(('.xls', '.xlsx')):
+        raise HTTPException(status_code=400, detail="Chỉ chấp nhận định dạng .xls hoặc .xlsx")
+        
+    result = employee_service.import_employees_from_excel(db, file)
+    
+    if result.get("status"):
+        if result.get("success_count", 0) > 0:
+            # Bắn tín hiệu để UI tự động tải lại cả 2 danh sách
+            background_tasks.add_task(ws_manager.broadcast, "REFRESH_EMPLOYEES")
+            background_tasks.add_task(ws_manager.broadcast, "REFRESH_DEPARTMENTS")
+        return result
+    else:
+        raise HTTPException(status_code=400, detail=result.get("message"))
+
+# =========================
+# EXPORT EXCEL
+# =========================
+@router.get("/export", status_code=200)
+def export_excel(db: Session = Depends(deps.get_db)):
+    """
+    Tải xuống file Excel danh sách nhân viên.
+    """
+    output = employee_service.export_employees_to_excel(db)
+    
+    headers = {
+        'Content-Disposition': 'attachment; filename="Employees.xlsx"'
+    }
+    
+    return StreamingResponse(
+        output, 
+        headers=headers, 
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )

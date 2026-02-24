@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException # [CẬP NHẬT] Thêm BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date
 
 from app.api import deps
+from app.core.websockets import ws_manager # [MỚI] Import WebSocket Manager
 from app.models.import_declaration import ImportType
 from app.schemas.import_declaration_schema import (
     ImportDeclarationResponse, 
@@ -36,9 +37,14 @@ def read_import_declarations(
 @router.post("/", response_model=ImportDeclarationResponse)
 def create_import_declaration(
     declaration_in: ImportDeclarationCreate,
+    background_tasks: BackgroundTasks, # [CẬP NHẬT] Thêm BackgroundTasks
     db: Session = Depends(deps.get_db)
 ):
-    return ImportDeclarationService(db).create(obj_in=declaration_in)
+    new_decl = ImportDeclarationService(db).create(obj_in=declaration_in)
+    
+    # [CẬP NHẬT] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_DECLARATIONS")
+    return new_decl
 
 @router.get("/{declaration_id}", response_model=ImportDeclarationResponse)
 def read_import_declaration(
@@ -55,21 +61,31 @@ def read_import_declaration(
 def update_import_declaration(
     declaration_id: int,
     declaration_in: ImportDeclarationUpdate,
+    background_tasks: BackgroundTasks, # [CẬP NHẬT] Thêm BackgroundTasks
     db: Session = Depends(deps.get_db)
 ):
     service = ImportDeclarationService(db)
     decl = service.get(declaration_id)
     if not decl:
         raise HTTPException(status_code=404, detail="Not found")
-    return service.update(db_obj=decl, obj_in=declaration_in)
+        
+    updated_decl = service.update(db_obj=decl, obj_in=declaration_in)
+    
+    # [CẬP NHẬT] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_DECLARATIONS")
+    return updated_decl
 
 @router.delete("/{declaration_id}")
 def delete_import_declaration(
     declaration_id: int,
+    background_tasks: BackgroundTasks, # [CẬP NHẬT] Thêm BackgroundTasks
     db: Session = Depends(deps.get_db)
 ):
     service = ImportDeclarationService(db)
     service.delete(declaration_id)
+    
+    # [CẬP NHẬT] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_DECLARATIONS")
     return {"message": "Deleted successfully"}
 
 # --- CHI TIẾT ---
@@ -77,22 +93,36 @@ def delete_import_declaration(
 def add_detail(
     declaration_id: int,
     detail_in: ImportDetailCreate,
+    background_tasks: BackgroundTasks, # [CẬP NHẬT] Thêm BackgroundTasks
     db: Session = Depends(deps.get_db)
 ):
-    return ImportDeclarationService(db).add_detail(declaration_id, detail_in)
+    new_detail = ImportDeclarationService(db).add_detail(declaration_id, detail_in)
+    
+    # [CẬP NHẬT] Bắn tín hiệu WebSocket (Do ảnh hưởng tới cấu trúc Tờ khai)
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_DECLARATIONS")
+    return new_detail
 
 @router.put("/details/{detail_id}", response_model=ImportDetailResponse)
 def update_detail(
     detail_id: int,
     detail_in: ImportDetailUpdate,
+    background_tasks: BackgroundTasks, # [CẬP NHẬT] Thêm BackgroundTasks
     db: Session = Depends(deps.get_db)
 ):
-    return ImportDeclarationService(db).update_detail(detail_id, detail_in)
+    updated_detail = ImportDeclarationService(db).update_detail(detail_id, detail_in)
+    
+    # [CẬP NHẬT] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_DECLARATIONS")
+    return updated_detail
 
 @router.delete("/details/{detail_id}")
 def delete_detail(
     detail_id: int,
+    background_tasks: BackgroundTasks, # [CẬP NHẬT] Thêm BackgroundTasks
     db: Session = Depends(deps.get_db)
 ):
     ImportDeclarationService(db).delete_detail(detail_id)
+    
+    # [CẬP NHẬT] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_DECLARATIONS")
     return {"message": "Detail deleted successfully"}

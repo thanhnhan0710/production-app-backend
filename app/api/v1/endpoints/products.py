@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks # [THÊM] BackgroundTasks
+from fastapi import APIRouter, Depends, File, HTTPException, BackgroundTasks, UploadFile # [THÊM] BackgroundTasks
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -98,4 +99,49 @@ def search_products(
 ):
     return product_service.search_products(
         db, keyword, skip, limit
+    )
+
+# =========================
+# IMPORT EXCEL
+# =========================
+@router.post("/import", status_code=200)
+def import_excel(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    db: Session = Depends(deps.get_db)
+):
+    """
+    Upload file Excel để import danh sách Sản phẩm.
+    """
+    if not file.filename.endswith(('.xls', '.xlsx')):
+        raise HTTPException(status_code=400, detail="Chỉ chấp nhận định dạng .xls hoặc .xlsx")
+        
+    result = product_service.import_products_from_excel(db, file)
+    
+    if result.get("status"):
+        if result.get("success_count", 0) > 0:
+            # Bắn tín hiệu WebSocket để giao diện tự làm mới
+            background_tasks.add_task(ws_manager.broadcast, "REFRESH_PRODUCTS")
+        return result
+    else:
+        raise HTTPException(status_code=400, detail=result.get("message"))
+
+# =========================
+# EXPORT EXCEL
+# =========================
+@router.get("/export", status_code=200)
+def export_excel(db: Session = Depends(deps.get_db)):
+    """
+    Tải xuống file Excel danh sách sản phẩm.
+    """
+    output = product_service.export_products_to_excel(db)
+    
+    headers = {
+        'Content-Disposition': 'attachment; filename="Danh_Muc_San_Pham.xlsx"'
+    }
+    
+    return StreamingResponse(
+        output, 
+        headers=headers, 
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
