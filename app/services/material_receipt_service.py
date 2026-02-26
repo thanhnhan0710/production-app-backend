@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, desc
+from sqlalchemy import or_, desc, func # [FIX] Thêm func để regex
 from fastapi import HTTPException
 from typing import List, Optional
 from datetime import datetime
@@ -294,9 +294,6 @@ class MaterialReceiptService:
             note=detail_in.note
         )
         
-        # [FIX QUAN TRỌNG] Gán thuộc tính Location và Origin vào object Python (Transient)
-        # Dù bảng MaterialReceiptDetail trong DB không có cột này, 
-        # nhưng ta cần gán vào object để truyền sang hàm _sync_batch_for_detail
         if hasattr(detail_in, 'location'):
              db_detail.location = detail_in.location
         
@@ -314,10 +311,8 @@ class MaterialReceiptService:
         return db_detail
 
     def _sync_batch_for_detail(self, detail: MaterialReceiptDetail) -> Optional[Batch]:
-        """Tạo/Update Batch và trả về object"""
         supplier_batch = detail.supplier_batch_no if detail.supplier_batch_no else f"NO-BATCH-{detail.detail_id}"
         
-        # [FIX] Lấy thông tin an toàn bằng getattr để tránh lỗi nếu object không có thuộc tính
         current_location = getattr(detail, 'location', None)
         current_origin = getattr(detail, 'origin_country', None)
         
@@ -335,7 +330,6 @@ class MaterialReceiptService:
                 existing_batch.material_id = detail.material_id
                 is_changed = True
             
-            # Update Origin & Location nếu có giá trị mới
             if current_origin is not None and existing_batch.origin_country != current_origin:
                 existing_batch.origin_country = current_origin
                 is_changed = True
@@ -349,14 +343,12 @@ class MaterialReceiptService:
             
             return existing_batch
         else:
-            # Create New Batch
             batch_in = BatchCreate(
                 supplier_batch_no=supplier_batch,
                 material_id=detail.material_id,
                 qc_status=BatchQCStatus.PENDING,
                 is_active=True,
                 receipt_detail_id=detail.detail_id,
-                # Truyền đúng thông tin location và origin
                 origin_country=current_origin,
                 location=current_location 
             )
@@ -401,22 +393,29 @@ class MaterialReceiptService:
         
         self.db.add(po_header)
 
+    # [FIX CỰC KỲ QUAN TRỌNG] Sửa lỗi parse mã rác OFF770
     def generate_next_receipt_number(self) -> str:
         now = datetime.now()
         prefix = now.strftime("%Y/%m-") 
         
-        last_receipt = self.db.query(MaterialReceipt.receipt_number)\
+        # Chỉ lấy những mã mà đằng sau dấu '-' chứa TOÀN SỐ (ví dụ: -001, -002, bỏ qua -OFF770)
+        # Regex cho PostgreSQL / MySQL: receipt_number ~ '^2026/02-\d+$'
+        # Do SQLite không có hàm regex chuẩn, ta lấy tất cả và lọc bằng Python cho an toàn và tương thích với mọi DB.
+        
+        receipts = self.db.query(MaterialReceipt.receipt_number)\
             .filter(MaterialReceipt.receipt_number.like(f"{prefix}%"))\
-            .order_by(desc(MaterialReceipt.receipt_number))\
-            .first()
+            .all()
         
-        if not last_receipt:
-            return f"{prefix}001"
+        max_seq = 0
+        for r in receipts:
+            num_str = r[0]
+            parts = num_str.split('-')
+            if len(parts) == 2:
+                seq_str = parts[1]
+                if seq_str.isdigit(): # Chỉ lấy các đoạn chuỗi là số
+                    seq_int = int(seq_str)
+                    if seq_int > max_seq:
+                        max_seq = seq_int
         
-        try:
-            last_number_str = last_receipt[0]
-            sequence_part = last_number_str.split('-')[-1]
-            next_sequence = int(sequence_part) + 1
-            return f"{prefix}{next_sequence:03d}"
-        except (ValueError, IndexError):
-            return f"{prefix}001"
+        next_sequence = max_seq + 1
+        return f"{prefix}{next_sequence:03d}"

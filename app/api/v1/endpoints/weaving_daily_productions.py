@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks # [MỚI] Thêm BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date
@@ -10,6 +10,7 @@ from app.schemas.weaving_daily_production_schema import (
     WeavingProductionUpdate
 )
 from app.services import weaving_daily_production_service
+from app.core.websockets import ws_manager # [MỚI] Import WebSocket Manager
 
 router = APIRouter()
 
@@ -64,14 +65,18 @@ def search_productions(
 @router.post("/", response_model=WeavingProductionResponse)
 def create_production(
     production: WeavingProductionCreate,
+    background_tasks: BackgroundTasks, # [MỚI]
     db: Session = Depends(deps.get_db)
 ):
     """
     Tạo mới một bản ghi sản lượng (Thường dùng nếu nhập tay hoặc test).
     Lưu ý: Nếu trùng (date + product_id) sẽ báo lỗi IntegrityError.
     """
-    # Bạn có thể thêm try/catch ở đây để bắt lỗi trùng lặp nếu muốn trả về 400 đẹp hơn
-    return weaving_daily_production_service.create_production(db, production)
+    new_prod = weaving_daily_production_service.create_production(db, production)
+    
+    # [MỚI] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_WEAVING_PRODUCTIONS")
+    return new_prod
 
 
 # =========================
@@ -98,6 +103,7 @@ def read_production(
 def update_production(
     production_id: int,
     production_in: WeavingProductionUpdate,
+    background_tasks: BackgroundTasks, # [MỚI]
     db: Session = Depends(deps.get_db)
 ):
     """
@@ -108,6 +114,9 @@ def update_production(
     )
     if not updated_production:
         raise HTTPException(status_code=404, detail="Production record not found")
+        
+    # [MỚI] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_WEAVING_PRODUCTIONS")
     return updated_production
 
 
@@ -117,6 +126,7 @@ def update_production(
 @router.delete("/{production_id}")
 def delete_production(
     production_id: int,
+    background_tasks: BackgroundTasks, # [MỚI]
     db: Session = Depends(deps.get_db)
 ):
     """
@@ -125,6 +135,9 @@ def delete_production(
     success = weaving_daily_production_service.delete_production(db, production_id)
     if not success:
         raise HTTPException(status_code=404, detail="Production record not found")
+        
+    # [MỚI] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_WEAVING_PRODUCTIONS")
     return {"message": "Deleted successfully"}
 
 # =========================
@@ -133,7 +146,12 @@ def delete_production(
 @router.post("/calculate-manual")
 def manual_calculation(
     target_date: date,
+    background_tasks: BackgroundTasks, # [MỚI]
     db: Session = Depends(deps.get_db)
 ):
     """API này để chạy thủ công, cập nhật dữ liệu cho những ngày cũ"""
-    return weaving_daily_production_service.calculate_daily_production(db, target_date)
+    result = weaving_daily_production_service.calculate_daily_production(db, target_date)
+    
+    # [MỚI] Việc tính toán lại chắc chắn làm thay đổi số liệu, cần bắn WebSocket để UI cập nhật
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_WEAVING_PRODUCTIONS")
+    return result

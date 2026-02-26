@@ -19,6 +19,7 @@ app = FastAPI(
     title="Production Management API",
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
+app.router.redirect_slashes = False
 
 # Tạo thư mục static nếu chưa có
 if not os.path.exists("static"):

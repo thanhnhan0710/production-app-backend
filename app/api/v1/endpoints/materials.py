@@ -24,7 +24,7 @@ router = APIRouter()
 @router.get("/", response_model=List[MaterialResponse])
 def read_materials(
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 4000,
     db: Session = Depends(deps.get_db)
 ):
     """

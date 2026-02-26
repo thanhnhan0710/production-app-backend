@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks # [MỚI] Thêm BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict
 from datetime import date
@@ -14,6 +14,7 @@ from app.schemas.material_receipt_schema import (
     MaterialReceiptFilter
 )
 from app.services.material_receipt_service import MaterialReceiptService
+from app.core.websockets import ws_manager # [MỚI] Thêm WebSocket Manager
 
 router = APIRouter()
 
@@ -52,10 +53,16 @@ def read_receipts(
 @router.post("/", response_model=MaterialReceiptResponse)
 def create_receipt(
     receipt_in: MaterialReceiptCreate, 
+    background_tasks: BackgroundTasks, # [MỚI]
     db: Session = Depends(deps.get_db)
 ):
     service = MaterialReceiptService(db)
-    return service.create(obj_in=receipt_in)
+    new_receipt = service.create(obj_in=receipt_in)
+    
+    # [MỚI] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_MATERIAL_RECEIPTS")
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_INVENTORY") # Ảnh hưởng tồn kho
+    return new_receipt
 
 @router.get("/{receipt_id}", response_model=MaterialReceiptResponse)
 def read_receipt(
@@ -72,18 +79,30 @@ def read_receipt(
 def update_receipt(
     receipt_id: int, 
     receipt_in: MaterialReceiptUpdate, 
+    background_tasks: BackgroundTasks, # [MỚI]
     db: Session = Depends(deps.get_db)
 ):
     service = MaterialReceiptService(db)
-    return service.update(receipt_id, obj_in=receipt_in)
+    updated_receipt = service.update(receipt_id, obj_in=receipt_in)
+    
+    # [MỚI] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_MATERIAL_RECEIPTS")
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_INVENTORY")
+    return updated_receipt
 
 @router.delete("/{receipt_id}")
 def delete_receipt(
     receipt_id: int, 
+    background_tasks: BackgroundTasks, # [MỚI]
     db: Session = Depends(deps.get_db)
 ):
     service = MaterialReceiptService(db)
-    return service.delete(receipt_id)
+    result = service.delete(receipt_id)
+    
+    # [MỚI] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_MATERIAL_RECEIPTS")
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_INVENTORY")
+    return result
 
 # --- DETAIL ENDPOINTS ---
 
@@ -91,24 +110,42 @@ def delete_receipt(
 def add_receipt_detail(
     receipt_id: int, 
     detail_in: MaterialReceiptDetailCreate, 
+    background_tasks: BackgroundTasks, # [MỚI]
     db: Session = Depends(deps.get_db)
 ):
     service = MaterialReceiptService(db)
-    return service.add_detail(receipt_id=receipt_id, detail_in=detail_in)
+    new_detail = service.add_detail(receipt_id=receipt_id, detail_in=detail_in)
+    
+    # [MỚI] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_MATERIAL_RECEIPTS")
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_INVENTORY")
+    return new_detail
 
 @router.put("/details/{detail_id}", response_model=MaterialReceiptDetailResponse)
 def update_receipt_detail(
     detail_id: int, 
     detail_in: MaterialReceiptDetailUpdate, 
+    background_tasks: BackgroundTasks, # [MỚI]
     db: Session = Depends(deps.get_db)
 ):
     service = MaterialReceiptService(db)
-    return service.update_detail(detail_id=detail_id, obj_in=detail_in)
+    updated_detail = service.update_detail(detail_id=detail_id, obj_in=detail_in)
+    
+    # [MỚI] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_MATERIAL_RECEIPTS")
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_INVENTORY")
+    return updated_detail
 
 @router.delete("/details/{detail_id}")
 def delete_receipt_detail(
     detail_id: int, 
+    background_tasks: BackgroundTasks, # [MỚI]
     db: Session = Depends(deps.get_db)
 ):
     service = MaterialReceiptService(db)
-    return service.delete_detail(detail_id=detail_id)
+    result = service.delete_detail(detail_id=detail_id)
+    
+    # [MỚI] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_MATERIAL_RECEIPTS")
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_INVENTORY")
+    return result

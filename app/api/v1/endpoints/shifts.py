@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks # [MỚI] Thêm BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -9,9 +9,9 @@ from app.schemas.shift_schema import (
     ShiftUpdate
 )
 from app.services import shift_service
+from app.core.websockets import ws_manager # [MỚI] Import WebSocket Manager
 
 router = APIRouter()
-
 
 # =========================
 # GET LIST
@@ -31,9 +31,14 @@ def read_shifts(
 @router.post("/", response_model=ShiftResponse)
 def create_shift(
     shift: ShiftCreate,
+    background_tasks: BackgroundTasks, # [MỚI]
     db: Session = Depends(deps.get_db)
 ):
-    return shift_service.create_shift(db, shift)
+    new_shift = shift_service.create_shift(db, shift)
+    
+    # [MỚI] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_SHIFTS")
+    return new_shift
 
 
 # =========================
@@ -43,6 +48,7 @@ def create_shift(
 def update_shift(
     shift_id: int,
     shift: ShiftUpdate,
+    background_tasks: BackgroundTasks, # [MỚI]
     db: Session = Depends(deps.get_db)
 ):
     updated_shift = shift_service.update_shift(
@@ -50,6 +56,9 @@ def update_shift(
     )
     if not updated_shift:
         raise HTTPException(status_code=404, detail="Shift not found")
+        
+    # [MỚI] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_SHIFTS")
     return updated_shift
 
 
@@ -59,11 +68,15 @@ def update_shift(
 @router.delete("/{shift_id}")
 def delete_shift(
     shift_id: int,
+    background_tasks: BackgroundTasks, # [MỚI]
     db: Session = Depends(deps.get_db)
 ):
     success = shift_service.delete_shift(db, shift_id)
     if not success:
         raise HTTPException(status_code=404, detail="Shift not found")
+        
+    # [MỚI] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_SHIFTS")
     return {"message": "Deleted successfully"}
 
 

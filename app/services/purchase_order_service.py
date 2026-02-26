@@ -1,3 +1,5 @@
+import math
+
 import pandas as pd
 
 from sqlalchemy.orm import Session, joinedload
@@ -287,10 +289,17 @@ class PurchaseOrderService:
         success_decl = 0
         error_rows = []
 
-        # Hàm tiện ích ép kiểu an toàn
         def safe_float(val):
-            try: return float(val) if val is not None else 0.0
-            except: return 0.0
+            if val is None: 
+                return 0.0
+            try: 
+                f_val = float(val)
+                # Kiểm tra xem f_val có phải là NaN (Not a Number) hay không
+                if math.isnan(f_val):
+                    return 0.0
+                return f_val
+            except: 
+                return 0.0
             
         def safe_date(val):
             if pd.isnull(val) or val is None: return None
@@ -304,32 +313,48 @@ class PurchaseOrderService:
             po_number = str(row.get('PO', '')).strip()
             item_code = str(row.get('Item Code', '')).strip()
 
-            # Bỏ qua dòng trống
-            if not po_number or po_number == 'None' or not item_code or item_code == 'None':
+            # ---------------------------------------------------------
+            # [MỚI] LỌC RÁC: Bỏ qua dòng trống, dòng chứa chữ 'nan', 'nat', 'none'
+            # ---------------------------------------------------------
+            invalid_keywords = ['none', 'nan', 'nat', '']
+            if not po_number or po_number.lower() in invalid_keywords:
+                continue
+            if not item_code or item_code.lower() in invalid_keywords:
                 continue
 
             # ---------------------------------------------------------
             # 1. XỬ LÝ SUPPLIER & MATERIAL
             # ---------------------------------------------------------
             supplier_name = str(row.get('Supplier', '')).strip()
-            supplier = self.db.query(Supplier).filter(Supplier.supplier_name.ilike(f"%{supplier_name}%")).first()
+            supplier = self.db.query(Supplier).filter(Supplier.short_name.ilike(f"%{supplier_name}%")).first()
             if not supplier:
-                # Tự động tạo Supplier nếu chưa có
-                supplier = Supplier(supplier_name=supplier_name, supplier_code=supplier_name[:10].upper())
+                # Tự động tạo Supplier nếu chưa có (nhớ đảm bảo các trường bắt buộc như email đã được xử lý)
+                supplier = Supplier(supplier_name=supplier_name, short_name=supplier_name, email="")
                 self.db.add(supplier)
                 self.db.flush()
 
             material = self.db.query(Material).filter(Material.material_code == item_code).first()
             if not material:
-                error_rows.append(f"Dòng {excel_row}: Mã vật tư '{item_code}' không tồn tại trong hệ thống.")
-                continue
+                # ---------------------------------------------------------
+                # [MỚI] TỰ ĐỘNG TẠO VẬT TƯ NẾU CHƯA CÓ
+                # ---------------------------------------------------------
+                material = Material(
+                    material_code=item_code,
+                    material_name=item_code, # Tạm lấy mã làm tên vật tư
+                    # BẮT BUỘC PHẢI CÓ uom_base_id VÀ uom_production_id THEO MODEL
+                    # TODO: Thay số 1 bằng ID của đơn vị "KG" thực tế trong bảng units của bạn
+                    uom_base_id=1,  
+                    uom_production_id=1
+                )
+                self.db.add(material)
+                self.db.flush() # Lưu ngay để lấy ID cho các bước sau
 
             # ---------------------------------------------------------
             # 2. XỬ LÝ ĐƠN ĐẶT HÀNG (PURCHASE ORDER)
             # ---------------------------------------------------------
             eta_date = safe_date(row.get('ETA'))
             
-            po_header = self.get_by_number(po_number)
+            po_header = self.get_by_number(po_number) # Đảm bảo hàm này có tồn tại trong class của bạn
             if not po_header:
                 # Tạo mới PO Header
                 po_header = PurchaseOrderHeader(
@@ -377,7 +402,7 @@ class PurchaseOrderService:
             # ---------------------------------------------------------
             decl_no = str(row.get('Declaration No.', '')).strip()
             
-            if decl_no and decl_no != 'None':
+            if decl_no and decl_no.lower() not in invalid_keywords:
                 decl_date = safe_date(row.get('Declaration Date')) or date.today()
                 invoice_no = str(row.get('Invoice No.', '')).strip()
                 
@@ -387,7 +412,7 @@ class PurchaseOrderService:
                     decl_header = ImportDeclaration(
                         declaration_no=decl_no,
                         declaration_date=decl_date,
-                        invoice_no=invoice_no if invoice_no != 'None' else None,
+                        invoice_no=invoice_no if invoice_no.lower() not in invalid_keywords else None,
                         type_of_import=ImportType.E31 # Giả định E31
                     )
                     self.db.add(decl_header)

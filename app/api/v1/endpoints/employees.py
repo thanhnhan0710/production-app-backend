@@ -1,7 +1,7 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 from typing import List
-from app.core.websockets import ws_manager # [MỚI] Import WebSocket
+from app.core.websockets import ws_manager # Import WebSocket
 from fastapi.responses import StreamingResponse
 from app.api import deps
 from app.schemas.employee_schema import EmployeeResponse, EmployeeCreate, EmployeeUpdate
@@ -14,10 +14,18 @@ def read_employees(skip: int = 0, limit: int = 100, db: Session = Depends(deps.g
     return employee_service.get_employees(db, skip=skip, limit=limit)
 
 @router.post("/", response_model=EmployeeResponse)
-def create_employee(emp: EmployeeCreate, db: Session = Depends(deps.get_db)):
-    return employee_service.create_employee(db, emp)
+def create_employee(
+    emp: EmployeeCreate, 
+    background_tasks: BackgroundTasks, # [MỚI] Thêm BackgroundTasks
+    db: Session = Depends(deps.get_db)
+):
+    new_emp = employee_service.create_employee(db, emp)
+    
+    # [MỚI] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_EMPLOYEES")
+    return new_emp
 
-# [MỚI] Endpoint tìm theo mã bộ phận
+# Endpoint tìm theo mã bộ phận
 @router.get("/department/{department_id}", response_model=List[EmployeeResponse])
 def read_employees_by_department(
     department_id: int,
@@ -28,17 +36,32 @@ def read_employees_by_department(
     return employee_service.get_employees_by_department(db, department_id, skip, limit)
 
 @router.put("/{emp_id}", response_model=EmployeeResponse)
-def update_employee(emp_id: int, emp: EmployeeUpdate, db: Session = Depends(deps.get_db)):
+def update_employee(
+    emp_id: int, 
+    emp: EmployeeUpdate, 
+    background_tasks: BackgroundTasks, # [MỚI] Thêm BackgroundTasks
+    db: Session = Depends(deps.get_db)
+):
     updated_emp = employee_service.update_employee(db, emp_id, emp)
     if not updated_emp:
         raise HTTPException(status_code=404, detail="Employee not found")
+        
+    # [MỚI] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_EMPLOYEES")
     return updated_emp
 
 @router.delete("/{emp_id}")
-def delete_employee(emp_id: int, db: Session = Depends(deps.get_db)):
+def delete_employee(
+    emp_id: int, 
+    background_tasks: BackgroundTasks, # [MỚI] Thêm BackgroundTasks
+    db: Session = Depends(deps.get_db)
+):
     success = employee_service.delete_employee(db, emp_id)
     if not success:
         raise HTTPException(status_code=404, detail="Employee not found")
+        
+    # [MỚI] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_EMPLOYEES")
     return {"message": "Deleted successfully"}
 
 @router.get("/search", response_model=List[EmployeeResponse])

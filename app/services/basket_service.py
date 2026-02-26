@@ -1,6 +1,7 @@
+import pandas as pd
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 from typing import Optional
 
 # Import Model and Schema
@@ -143,3 +144,76 @@ def delete_basket(db: Session, basket_id: int):
     db.delete(db_basket)
     db.commit()
     return {"message": "Basket deleted successfully"}
+
+# ============================
+# EXCEL IMPORT
+# ============================
+def import_basket_from_excel(db: Session, file: UploadFile):
+    try:
+        df = pd.read_excel(file.file, header=0)
+        df.columns = df.columns.str.strip()
+        df = df.where(pd.notnull(df), None)
+    except Exception as e:
+        return {"status": False, "message": f"Lỗi đọc file Excel: {str(e)}"}
+
+    success_count = 0
+    error_rows = []
+
+    def safe_str(val):
+        if pd.isnull(val) or val is None or str(val).strip() in ['', 'nan', 'None']: return ""
+        return str(val).strip()
+
+    def safe_float(val):
+        try: return float(val) if val is not None else 0.0
+        except: return 0.0
+
+    # Cache lại mã rổ để check trùng lặp (tránh gọi DB liên tục)
+    existing_baskets = {b[0] for b in db.query(Basket.basket_code).all()}
+    processed_codes_in_file = set()
+
+    for index, row in df.iterrows():
+        excel_row = index + 2
+        
+        # Ánh xạ theo tên cột trong file mẫu của bạn
+        basket_code = safe_str(row.get('Mã rổ'))
+        
+        if not basket_code:
+            continue
+
+        # Check trùng lặp
+        if basket_code in existing_baskets or basket_code in processed_codes_in_file:
+            error_rows.append(f"Dòng {excel_row}: Mã rổ '{basket_code}' đã tồn tại hoặc bị trùng lặp.")
+            continue
+
+        tare_weight = safe_float(row.get('Trọng lượng'))
+        
+        if tare_weight <= 0:
+            error_rows.append(f"Dòng {excel_row}: Rổ '{basket_code}' có trọng lượng <= 0.")
+            continue
+
+        try:
+            new_basket = Basket(
+                basket_code=basket_code,
+                tare_weight=tare_weight,
+                status=BasketStatus.READY, # Mặc định READY
+                note="Nhập từ Excel"
+            )
+            db.add(new_basket)
+            
+            processed_codes_in_file.add(basket_code)
+            success_count += 1
+            
+        except Exception as e:
+            error_rows.append(f"Dòng {excel_row}: Lỗi dữ liệu ({str(e)})")
+
+    try:
+        db.commit()
+    except Exception as e:
+         db.rollback()
+         return {"status": False, "message": f"Lỗi lưu Database: {str(e)}"}
+    
+    return {
+        "status": True, 
+        "success_count": success_count, 
+        "errors": error_rows
+    }

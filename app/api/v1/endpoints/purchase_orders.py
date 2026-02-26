@@ -29,7 +29,7 @@ def get_next_po_number(db: Session = Depends(deps.get_db)):
 @router.get("/", response_model=List[POHeaderResponse])
 def read_purchase_orders(
     skip: int = 0, 
-    limit: int = 100, 
+    limit: int = 4000, 
     search: Optional[str] = None,
     vendor_id: Optional[int] = None,
     status: Optional[POStatus] = None,

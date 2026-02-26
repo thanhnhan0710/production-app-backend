@@ -1,38 +1,32 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date
 
 from app.api import deps
-from app.schemas.work_schedule_schema import (
-    WorkScheduleResponse,
-    WorkScheduleCreate,
-    WorkScheduleUpdate
-)
+from app.schemas.work_schedule_schema import WorkScheduleResponse, WorkScheduleCreate, WorkScheduleUpdate
 from app.services import work_schedule_service
+from app.core.websockets import ws_manager # Import WebSocket Manager
 
+# DÒNG NÀY RẤT QUAN TRỌNG ĐỂ FIX LỖI BẠN ĐANG GẶP
 router = APIRouter()
 
 # =========================
-# GET LIST (Default)
+# GET LIST
 # =========================
 @router.get("/", response_model=List[WorkScheduleResponse])
-def read_work_schedules(
-    skip: int = 0,
-    limit: int = 100,
+def read_schedules(
+    skip: int = 0, 
+    limit: int = 100, 
     db: Session = Depends(deps.get_db)
 ):
-    """
-    Get list of work schedules (sorted by date descending).
-    """
-    return work_schedule_service.get_schedules(db, skip, limit)
-
+    return work_schedule_service.get_schedules(db, skip=skip, limit=limit)
 
 # =========================
-# SEARCH (Advanced Filter)
+# SEARCH
 # =========================
 @router.get("/search", response_model=List[WorkScheduleResponse])
-def search_work_schedules(
+def search_schedules(
     employee_id: Optional[int] = None,
     shift_id: Optional[int] = None,
     from_date: Optional[date] = None,
@@ -41,78 +35,58 @@ def search_work_schedules(
     limit: int = 100,
     db: Session = Depends(deps.get_db)
 ):
-    """
-    Search schedules by Employee, Shift, or Date Range.
-    Example: Find schedule of Employee 1 in December 2023.
-    """
     return work_schedule_service.search_schedules(
-        db=db,
-        employee_id=employee_id,
-        shift_id=shift_id,
-        from_date=from_date,
-        to_date=to_date,
-        skip=skip,
+        db, 
+        employee_id=employee_id, 
+        shift_id=shift_id, 
+        from_date=from_date, 
+        to_date=to_date, 
+        skip=skip, 
         limit=limit
     )
-
-
-# =========================
-# GET DETAIL
-# =========================
-@router.get("/{schedule_id}", response_model=WorkScheduleResponse)
-def read_work_schedule(
-    schedule_id: int,
-    db: Session = Depends(deps.get_db)
-):
-    """
-    Get specific schedule details by ID.
-    """
-    schedule = work_schedule_service.get_schedule_by_id(db, schedule_id)
-    if not schedule:
-        raise HTTPException(status_code=404, detail="Work schedule not found")
-    return schedule
-
 
 # =========================
 # CREATE
 # =========================
 @router.post("/", response_model=WorkScheduleResponse)
-def create_work_schedule(
+def create_schedule(
     schedule_in: WorkScheduleCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(deps.get_db)
 ):
-    """
-    Create a new schedule.
-    Validation: Prevents double-booking (same employee, same date).
-    """
-    return work_schedule_service.create_schedule(db, schedule_in)
-
+    new_schedule = work_schedule_service.create_schedule(db, schedule_in)
+    
+    # Bắn WebSocket sau khi tạo
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_WORK_SCHEDULES")
+    return new_schedule
 
 # =========================
 # UPDATE
 # =========================
 @router.put("/{schedule_id}", response_model=WorkScheduleResponse)
-def update_work_schedule(
+def update_schedule(
     schedule_id: int,
     schedule_in: WorkScheduleUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(deps.get_db)
 ):
-    """
-    Update schedule info (change date, shift, or employee).
-    Validation: Checks for conflicts if date/employee changes.
-    """
-    return work_schedule_service.update_schedule(db, schedule_id, schedule_in)
-
+    updated_schedule = work_schedule_service.update_schedule(db, schedule_id, schedule_in)
+    
+    # Bắn WebSocket sau khi sửa
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_WORK_SCHEDULES")
+    return updated_schedule
 
 # =========================
 # DELETE
 # =========================
 @router.delete("/{schedule_id}")
-def delete_work_schedule(
+def delete_schedule(
     schedule_id: int,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(deps.get_db)
 ):
-    """
-    Delete a schedule.
-    """
-    return work_schedule_service.delete_schedule(db, schedule_id)
+    result = work_schedule_service.delete_schedule(db, schedule_id)
+    
+    # Bắn WebSocket sau khi xóa
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_WORK_SCHEDULES")
+    return result

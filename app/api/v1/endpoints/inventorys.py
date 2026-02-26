@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Body, Query
+from fastapi import APIRouter, Depends, HTTPException, Body, Query, BackgroundTasks # [MỚI] Thêm BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import Dict, Any, List, Optional
 
@@ -8,10 +8,11 @@ from app.schemas.inventory_schema import (
     InventoryAdjustment
 )
 from app.services.inventory_service import InventoryService
+from app.core.websockets import ws_manager # [MỚI] Import WebSocket Manager
 
 router = APIRouter()
 
-# --- [MỚI] 0. GET ALL INVENTORY (LIST) ---
+# --- 0. GET ALL INVENTORY (LIST) ---
 @router.get("/", response_model=List[InventoryStockResponse])
 def read_inventories(
     skip: int = 0,
@@ -64,6 +65,7 @@ def read_total_stock_by_material(
 @router.post("/adjust", response_model=InventoryStockResponse)
 def adjust_stock(
     adjustment: InventoryAdjustment, 
+    background_tasks: BackgroundTasks, # [MỚI] Thêm BackgroundTasks
     db: Session = Depends(deps.get_db)
 ):
     """
@@ -71,7 +73,12 @@ def adjust_stock(
     """
     service = InventoryService(db)
     try:
-        return service.adjust_stock(adjustment)
+        adjusted_stock = service.adjust_stock(adjustment)
+        
+        # [MỚI] Bắn tín hiệu làm mới giao diện tồn kho sau khi chỉnh sửa
+        background_tasks.add_task(ws_manager.broadcast, "REFRESH_INVENTORY")
+        
+        return adjusted_stock
     except HTTPException as e:
         raise e
     except Exception as e:

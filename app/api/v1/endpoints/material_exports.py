@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, BackgroundTasks # [MỚI] Thêm BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict
 from datetime import date
@@ -11,10 +11,11 @@ from app.schemas.material_export_schema import (
     MaterialExportFilter
 )
 from app.services.material_export_service import MaterialExportService
+from app.core.websockets import ws_manager # [MỚI] Import WebSocket Manager
 
 router = APIRouter()
 
-# [MỚI] Endpoint lấy số phiếu xuất tự động
+# Endpoint lấy số phiếu xuất tự động
 @router.get("/next-number", response_model=Dict[str, str])
 def get_next_export_number(db: Session = Depends(deps.get_db)):
     """
@@ -48,9 +49,18 @@ def read_exports(
     return service.get_multi(skip=skip, limit=limit, filter_param=filters)
 
 @router.post("/", response_model=MaterialExportResponse)
-def create_export(export_in: MaterialExportCreate, db: Session = Depends(deps.get_db)):
+def create_export(
+    export_in: MaterialExportCreate, 
+    background_tasks: BackgroundTasks, # [MỚI] Thêm BackgroundTasks
+    db: Session = Depends(deps.get_db)
+):
     service = MaterialExportService(db)
-    return service.create_export(export_in)
+    new_export = service.create_export(export_in)
+    
+    # [MỚI] Bắn tín hiệu làm mới danh sách phiếu xuất và tồn kho
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_MATERIAL_EXPORTS")
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_INVENTORY") # Xuất kho thì tồn kho sẽ đổi
+    return new_export
 
 @router.get("/{id}", response_model=MaterialExportResponse)
 def read_export_detail(id: int, db: Session = Depends(deps.get_db)):
@@ -61,11 +71,30 @@ def read_export_detail(id: int, db: Session = Depends(deps.get_db)):
     return item
 
 @router.put("/{id}", response_model=MaterialExportResponse)
-def update_export(id: int, export_in: MaterialExportUpdate, db: Session = Depends(deps.get_db)):
+def update_export(
+    id: int, 
+    export_in: MaterialExportUpdate, 
+    background_tasks: BackgroundTasks, # [MỚI] Thêm BackgroundTasks
+    db: Session = Depends(deps.get_db)
+):
     service = MaterialExportService(db)
-    return service.update(id, export_in)
+    updated_export = service.update(id, export_in)
+    
+    # [MỚI] Bắn tín hiệu làm mới danh sách phiếu xuất và tồn kho
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_MATERIAL_EXPORTS")
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_INVENTORY")
+    return updated_export
 
 @router.delete("/{id}")
-def delete_export(id: int, db: Session = Depends(deps.get_db)):
+def delete_export(
+    id: int, 
+    background_tasks: BackgroundTasks, # [MỚI] Thêm BackgroundTasks
+    db: Session = Depends(deps.get_db)
+):
     service = MaterialExportService(db)
-    return service.delete(id)
+    result = service.delete(id)
+    
+    # [MỚI] Bắn tín hiệu làm mới danh sách phiếu xuất và tồn kho
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_MATERIAL_EXPORTS")
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_INVENTORY")
+    return result

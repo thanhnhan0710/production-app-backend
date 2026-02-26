@@ -1,5 +1,5 @@
 # [THÊM] Import BackgroundTasks
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, File, HTTPException, Query, BackgroundTasks, UploadFile
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
@@ -127,3 +127,28 @@ def delete_basket(
     background_tasks.add_task(ws_manager.broadcast, "REFRESH_BASKETS")
     
     return result
+
+# =========================
+# IMPORT EXCEL
+# =========================
+@router.post("/import", status_code=200)
+def import_basket_excel(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    db: Session = Depends(deps.get_db)
+):
+    """
+    Import danh sách Rổ từ file Excel.
+    """
+    if not file.filename.endswith(('.xls', '.xlsx')):
+        raise HTTPException(status_code=400, detail="Chỉ chấp nhận file .xls hoặc .xlsx")
+        
+    result = basket_service.import_basket_from_excel(db, file)
+    
+    if result.get("status"):
+        if result.get("success_count", 0) > 0:
+            # Bắn tín hiệu làm mới giao diện
+            background_tasks.add_task(ws_manager.broadcast, "REFRESH_BASKETS")
+        return result
+    else:
+        raise HTTPException(status_code=400, detail=result.get("message"))

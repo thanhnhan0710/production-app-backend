@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks # [MỚI] Thêm BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
@@ -9,6 +9,7 @@ from app.schemas.weaving_basket_ticket_schema import (
     WeavingTicketUpdate
 )
 from app.services import weaving_basket_ticket_service
+from app.core.websockets import ws_manager # [MỚI] Import WebSocket Manager
 
 router = APIRouter()
 
@@ -43,10 +44,6 @@ def search_weaving_tickets(
 ):
     """
     Advanced search for tickets.
-    Useful for filtering:
-    - All tickets by a specific machine.
-    - All tickets handled by a specific employee.
-    - Tickets that are currently in progress (is_finished=False).
     """
     return weaving_basket_ticket_service.search_tickets(
         db=db,
@@ -83,14 +80,17 @@ def read_weaving_ticket(
 @router.post("/", response_model=WeavingTicketResponse)
 def create_weaving_ticket(
     ticket_in: WeavingTicketCreate,
+    background_tasks: BackgroundTasks, # [MỚI]
     db: Session = Depends(deps.get_db)
 ):
     """
     Create a new weaving ticket (Start process).
-    - Requires: Code, Product, Standard, Machine, Yarn info, Basket, Employee In.
-    - Checks for duplicate Code.
     """
-    return weaving_basket_ticket_service.create_ticket(db, ticket_in)
+    new_ticket = weaving_basket_ticket_service.create_ticket(db, ticket_in)
+    
+    # [MỚI] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_WEAVING_TICKETS")
+    return new_ticket
 
 
 # =========================
@@ -100,15 +100,17 @@ def create_weaving_ticket(
 def update_weaving_ticket(
     ticket_id: int,
     ticket_in: WeavingTicketUpdate,
+    background_tasks: BackgroundTasks, # [MỚI]
     db: Session = Depends(deps.get_db)
 ):
     """
     Update ticket info. Commonly used for the 'Finish' process (Ra rổ).
-    - If 'gross_weight' is provided, the system AUTOMATICALLY calculates 'net_weight' 
-      based on the Basket's tare weight.
-    - Can also be used to correct initial data.
     """
-    return weaving_basket_ticket_service.update_ticket(db, ticket_id, ticket_in)
+    updated_ticket = weaving_basket_ticket_service.update_ticket(db, ticket_id, ticket_in)
+    
+    # [MỚI] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_WEAVING_TICKETS")
+    return updated_ticket
 
 
 # =========================
@@ -117,9 +119,14 @@ def update_weaving_ticket(
 @router.delete("/{ticket_id}")
 def delete_weaving_ticket(
     ticket_id: int,
+    background_tasks: BackgroundTasks, # [MỚI]
     db: Session = Depends(deps.get_db)
 ):
     """
     Delete a weaving ticket.
     """
-    return weaving_basket_ticket_service.delete_ticket(db, ticket_id)
+    result = weaving_basket_ticket_service.delete_ticket(db, ticket_id)
+    
+    # [MỚI] Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_WEAVING_TICKETS")
+    return result

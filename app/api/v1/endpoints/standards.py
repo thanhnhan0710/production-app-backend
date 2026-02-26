@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
@@ -9,6 +9,7 @@ from app.schemas.standard_schema import (
     StandardUpdate
 )
 from app.services import standard_service
+from app.core.websockets import ws_manager # Import WebSocket Manager
 
 router = APIRouter()
 
@@ -71,45 +72,87 @@ def read_standard(
 
 
 # =========================
-# CREATE
+# CREATE (Có WebSocket)
 # =========================
 @router.post("/", response_model=StandardResponse)
 def create_standard(
     standard_in: StandardCreate,
+    background_tasks: BackgroundTasks, # Bổ sung BackgroundTasks
     db: Session = Depends(deps.get_db)
 ):
     """
     Create a new standard.
     """
-    return standard_service.create_standard(db, standard_in)
+    new_standard = standard_service.create_standard(db, standard_in)
+    
+    # Bắn tín hiệu WebSocket cho tất cả Client làm mới danh sách
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_STANDARDS")
+    
+    return new_standard
 
 
 # =========================
-# UPDATE
+# UPDATE (Có WebSocket)
 # =========================
 @router.put("/{standard_id}", response_model=StandardResponse)
 def update_standard(
     standard_id: int,
     standard_in: StandardUpdate,
+    background_tasks: BackgroundTasks, # Bổ sung BackgroundTasks
     db: Session = Depends(deps.get_db)
 ):
     """
     Update standard info.
     """
-    # Service raises HTTPException 404 or 500 internally
-    return standard_service.update_standard(db, standard_id, standard_in)
+    updated_standard = standard_service.update_standard(db, standard_id, standard_in)
+    
+    # Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_STANDARDS")
+    
+    return updated_standard
 
 
 # =========================
-# DELETE
+# DELETE (Có WebSocket)
 # =========================
 @router.delete("/{standard_id}")
 def delete_standard(
     standard_id: int,
+    background_tasks: BackgroundTasks, # Bổ sung BackgroundTasks
     db: Session = Depends(deps.get_db)
 ):
     """
     Delete a standard.
     """
-    # Service raises HTTPException 404 internally
-    return standard_service.delete_standard(db, standard_id)
+    standard_service.delete_standard(db, standard_id)
+    
+    # Bắn tín hiệu WebSocket
+    background_tasks.add_task(ws_manager.broadcast, "REFRESH_STANDARDS")
+    
+    return {"message": "Deleted successfully"}
+
+
+# =========================
+# IMPORT EXCEL (Có WebSocket)
+# =========================
+@router.post("/import", status_code=200)
+def import_standard_excel(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    db: Session = Depends(deps.get_db)
+):
+    """
+    Import standards from Excel file.
+    """
+    if not file.filename.endswith(('.xls', '.xlsx')):
+        raise HTTPException(status_code=400, detail="Chỉ chấp nhận file .xls hoặc .xlsx")
+        
+    result = standard_service.import_standard_from_excel(db, file)
+    
+    if result.get("status"):
+        if result.get("success_count", 0) > 0:
+            # Bắn tín hiệu WebSocket
+            background_tasks.add_task(ws_manager.broadcast, "REFRESH_STANDARDS")
+        return result
+    else:
+        raise HTTPException(status_code=400, detail=result.get("message"))

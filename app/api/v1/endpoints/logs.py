@@ -1,5 +1,5 @@
 from typing import Any, List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks # [MỚI] Thêm BackgroundTasks
 from sqlalchemy import inspect
 from sqlalchemy.orm import Session, joinedload
 
@@ -8,6 +8,7 @@ from app.core.model_map import get_model_by_tablename
 from app.schemas.log_schema import LogResponse
 from app.models.log import Log
 from app.models.user import User 
+from app.core.websockets import ws_manager # [MỚI] Thêm ws_manager
 
 router = APIRouter()
 
@@ -60,6 +61,7 @@ def read_logs(
 @router.post("/{log_id}/revert")
 def revert_log_change(
     log_id: int,
+    background_tasks: BackgroundTasks, # [MỚI]
     db: Session = Depends(deps.get_db),
     # [BẢO MẬT] Chỉ Admin mới được hoàn tác dữ liệu
     current_user: User = Depends(deps.get_current_active_admin),
@@ -84,6 +86,8 @@ def revert_log_change(
     except Exception:
         raise HTTPException(status_code=500, detail="Could not determine primary key for model")
 
+    table_name_upper = log.target_type.upper()
+
     # --- CASE 1: REVERT UPDATE ---
     if log.action == "UPDATE":
         if not log.changes or "old" not in log.changes:
@@ -107,6 +111,10 @@ def revert_log_change(
         if count > 0:
             db.commit()
             db.refresh(target_obj)
+            
+            # [MỚI] Gửi tín hiệu WebSocket để làm mới Log và cái Bảng tương ứng
+            background_tasks.add_task(ws_manager.broadcast, "REFRESH_LOGS")
+            background_tasks.add_task(ws_manager.broadcast, f"REFRESH_{table_name_upper}")
         
         return {"message": "Update reverted successfully"}
 
@@ -137,6 +145,11 @@ def revert_log_change(
             db.add(new_obj)
             db.commit()
             db.refresh(new_obj)
+            
+            # [MỚI] Gửi tín hiệu WebSocket để làm mới Log và cái Bảng tương ứng
+            background_tasks.add_task(ws_manager.broadcast, "REFRESH_LOGS")
+            background_tasks.add_task(ws_manager.broadcast, f"REFRESH_{table_name_upper}")
+            
             return {"message": f"Deleted data restored successfully (ID {log.target_id})"}
         except Exception as e:
             db.rollback()

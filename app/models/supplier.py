@@ -54,7 +54,7 @@ class Supplier(Base):
     contact_person = Column(String(100), nullable=True)
     
     # Email: Unique và Index để tránh trùng lặp và tìm kiếm nhanh
-    email = Column(String(100), unique=True, index=True, nullable=False)
+    email = Column(String(100), unique=True, index=True, nullable=True)
     
     address = Column(Text, nullable=True)
     lead_time_days = Column(Integer, default=7, comment="Thời gian giao hàng trung bình (ngày)")
