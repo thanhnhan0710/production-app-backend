@@ -29,7 +29,8 @@ from app.api.v1.endpoints import (
     inventorys,
     material_exports,
     weaving_productions,
-    logs
+    logs,
+    product_types
 )
 
 api_router = APIRouter()
@@ -65,4 +66,5 @@ api_router.include_router(inventorys.router, prefix="/inventorys", tags=["Invent
 api_router.include_router(material_exports.router, prefix="/material-exports", tags=["Material Exports"])
 api_router.include_router(weaving_productions.router, prefix="/weaving-productions", tags=["Weaving Productions"])
 api_router.include_router(logs.router, prefix="/logs", tags=["logs"])
+api_router.include_router(product_types.router, prefix="/product-types", tags=["Product Types"])
 

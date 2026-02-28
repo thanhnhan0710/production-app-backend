@@ -24,6 +24,7 @@ from app.models.iqc_result import IQCResult
 from app.models.material_export import MaterialExport,MaterialExportDetail
 from app.models.machine_log import MachineLog
 from app.models.weaving_production import WeavingProduction
+from app.models.product_type import ProductType
 # Import thêm các model khác của bạn ở đây...
 
 # Dictionary ánh xạ: "tên_bảng" -> ModelClass
@@ -58,6 +59,7 @@ MODEL_MAPPING = {
     "material_export_details":MaterialExportDetail,
     "machine_logs":MachineLog,
     "weaving_productions":WeavingProduction,
+    "product_types":ProductType
     # Thêm các bảng khác vào đây...
 }
 

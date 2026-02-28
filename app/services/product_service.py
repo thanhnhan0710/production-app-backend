@@ -1,50 +1,43 @@
 from fastapi import UploadFile
 import pandas as pd
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
 from io import BytesIO
+
 from app.models.product import Product
+from app.models.product_type import ProductType
 from app.schemas.product_schema import ProductCreate, ProductUpdate
 
+# =========================
+# GET LIST (Có phân trang & lọc theo loại)
+# =========================
+def get_products(db: Session, skip: int = 0, limit: int = 100, product_type_id: int = None):
+    # Dùng joinedload để tự động JOIN bảng ProductType (tránh N+1 query)
+    query = db.query(Product).options(joinedload(Product.product_type))
+    
+    if product_type_id:
+        query = query.filter(Product.product_type_id == product_type_id)
+        
+    return query.offset(skip).limit(limit).all()
 
 # =========================
-# GET LIST
+# SEARCH (Tìm theo mã SP, ghi chú, hoặc TÊN loại SP)
 # =========================
-def get_products(
-    db: Session,
-    skip: int = 0,
-    limit: int = 100
-):
+def search_products(db: Session, keyword: str, skip: int = 0, limit: int = 100):
     return (
-        db.query(Product)
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
-
-
-# =========================
-# SEARCH (MÃ / TÊN / GHI CHÚ)
-# =========================
-def search_products(
-    db: Session,
-    keyword: str,
-    skip: int = 0,
-    limit: int = 100
-):
-    return (
-        db.query(Product)
+        db.query(Product).options(joinedload(Product.product_type))
+        .outerjoin(ProductType)
         .filter(
             or_(
                 Product.item_code.ilike(f"%{keyword}%"),
-                Product.note.ilike(f"%{keyword}%")
+                Product.note.ilike(f"%{keyword}%"),
+                ProductType.type_name.ilike(f"%{keyword}%") # Tìm kiếm bằng tên loại
             )
         )
         .offset(skip)
         .limit(limit)
         .all()
     )
-
 
 # =========================
 # CREATE
@@ -56,28 +49,20 @@ def create_product(db: Session, data: ProductCreate):
     db.refresh(product)
     return product
 
-
 # =========================
-# UPDATE (PATCH STYLE)
+# UPDATE
 # =========================
-def update_product(
-    db: Session,
-    product_id: int,
-    data: ProductUpdate
-):
+def update_product(db: Session, product_id: int, data: ProductUpdate):
     product = db.get(Product, product_id)
     if not product:
         return None
-
-    update_data = data.model_dump(exclude_unset=True)
-
-    for k, v in update_data.items():
+        
+    for k, v in data.model_dump(exclude_unset=True).items():
         setattr(product, k, v)
-
+        
     db.commit()
     db.refresh(product)
     return product
-
 
 # =========================
 # DELETE
@@ -86,29 +71,18 @@ def delete_product(db: Session, product_id: int):
     product = db.get(Product, product_id)
     if not product:
         return False
-
+        
     db.delete(product)
     db.commit()
     return True
 
 # =========================
-# GET BY CODE (Hỗ trợ check trùng lặp)
-# =========================
-def get_product_by_code(db: Session, item_code: str):
-    return db.query(Product).filter(Product.item_code == item_code).first()
-
-# =========================
-# EXCEL IMPORT (Đã sửa lỗi trùng lặp)
+# EXCEL IMPORT (Tự động map khóa ngoại)
 # =========================
 def import_products_from_excel(db: Session, file: UploadFile):
     try:
-        # header=1 vì dòng 1 là tiêu đề chung, dòng 2 mới là cột Header
         df = pd.read_excel(file.file, header=1)
-        
-        # Xóa khoảng trắng thừa ở tiêu đề cột
         df.columns = df.columns.str.strip()
-        
-        # Chuyển NaN thành None
         df = df.where(pd.notnull(df), None)
     except Exception as e:
         return {"status": False, "message": f"Lỗi đọc file Excel: {str(e)}"}
@@ -116,41 +90,56 @@ def import_products_from_excel(db: Session, file: UploadFile):
     success_count = 0
     error_rows = []
 
-    # 1. Lấy tất cả item_code đang có trong DB bỏ vào một Set để check siêu nhanh
+    # Cache danh sách Mã Sản Phẩm hiện có để kiểm tra trùng lặp nhanh
     existing_products = db.query(Product.item_code).all()
-    # Chuyển thành set các chuỗi đã strip và viết thường (để so sánh không phân biệt hoa thường)
     existing_codes_set = {str(p[0]).strip().lower() for p in existing_products if p[0]}
-
-    # Set để theo dõi các mã trùng lặp BÊN TRONG CHÍNH FILE EXCEL
     codes_in_current_excel = set()
 
-    for index, row in df.iterrows():
-        excel_row_num = index + 3 # Dòng thực tế trên file Excel
+    # Cache danh sách Loại Sản Phẩm để lấy ID (Key là tên loại viết thường)
+    existing_types = db.query(ProductType).all()
+    type_map = {t.type_name.strip().lower(): t.product_type_id for t in existing_types if t.type_name}
 
-        # Trích xuất mã sản phẩm an toàn
+    for index, row in df.iterrows():
+        excel_row_num = index + 3
+
         item_code_val = row.get('Item Code')
         if pd.isnull(item_code_val) or str(item_code_val).strip() in ['', 'nan', 'None']:
-            continue # Bỏ qua dòng trống
+            continue 
             
         item_code = str(item_code_val).strip()
         item_code_lower = item_code.lower()
 
-        # 2. Kiểm tra trùng lặp (Với DB cũ VÀ với các dòng trước đó trong chính file Excel)
+        # Kiểm tra trùng lặp trong DB và trong chính file Excel đang import
         if item_code_lower in existing_codes_set or item_code_lower in codes_in_current_excel:
             error_rows.append(f"Dòng {excel_row_num}: Mã sản phẩm '{item_code}' đã tồn tại.")
             continue
 
-        # Thêm mã này vào set theo dõi file Excel hiện tại
         codes_in_current_excel.add(item_code_lower)
 
-        # 3. Xử lý ghi chú
+        # Xử lý Khóa Ngoại: Loại Sản Phẩm
+        type_val = row.get('Product Type') if 'Product Type' in df.columns else row.get('Loại sản phẩm')
+        product_type_id = None
+        
+        if type_val and str(type_val).strip() not in ['', 'nan', 'None']:
+            type_name = str(type_val).strip()
+            type_key = type_name.lower()
+            
+            # Nếu tên Loại chưa có trong DB -> Tự động sinh loại mới
+            if type_key not in type_map:
+                new_pt = ProductType(type_name=type_name)
+                db.add(new_pt)
+                db.flush() # Lưu tạm vào session để lấy ID ngay lập tức
+                type_map[type_key] = new_pt.product_type_id
+            
+            product_type_id = type_map[type_key]
+
         note_val = row.get('Note')
         note = str(note_val).strip() if not pd.isnull(note_val) and str(note_val).strip() not in ['', 'nan', 'None'] else None
 
         try:
-            # 4. Tạo data và insert
             new_product = Product(
                 item_code=item_code,
+                product_type_id=product_type_id,
                 note=note,
                 image_url=None
             )
@@ -160,7 +149,7 @@ def import_products_from_excel(db: Session, file: UploadFile):
         except Exception as e:
             error_rows.append(f"Dòng {excel_row_num}: Lỗi dữ liệu ({str(e)})")
 
-    # Commit toàn bộ thay đổi
+    # Lưu toàn bộ vào Database
     db.commit()
     
     return {
@@ -170,28 +159,25 @@ def import_products_from_excel(db: Session, file: UploadFile):
     }
 
 # =========================
-# EXCEL EXPORT (XUẤT FILE)
+# EXCEL EXPORT
 # =========================
 def export_products_to_excel(db: Session):
-    # Lấy toàn bộ sản phẩm
-    products = db.query(Product).all()
+    products = db.query(Product).options(joinedload(Product.product_type)).all()
 
-    # Tạo data map với các cột: No., Item Code, Note
     data = []
     for i, p in enumerate(products, 1):
         data.append({
             "No.": i,
             "Item Code": p.item_code,
+            # Lấy tên loại sản phẩm qua relationship
+            "Loại sản phẩm": p.product_type.type_name if p.product_type else "",
             "Note": p.note if p.note else ""
         })
 
     df = pd.DataFrame(data)
-    
-    # Ghi dữ liệu ra bộ nhớ ảo (RAM) thay vì lưu thành file vật lý
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Products')
 
-    # Đưa con trỏ đọc về đầu file
     output.seek(0)
     return output
