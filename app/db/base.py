@@ -3,7 +3,7 @@ from app.db.base_class import Base
 from app.models.department import Department
 from app.models.employee import Employee
 from app.models.supplier import Supplier
-from app.models.machine import Machine
+from app.models.machine import Machine, WeavingMachine, DyeingMachine
 from app.models.basket import Basket
 from app.models.shift import Shift
 from app.models.unit import Unit
@@ -31,3 +31,7 @@ from app.models.material_export import MaterialExport,MaterialExportDetail
 from app.models.machine_log import MachineLog
 from app.models.weaving_production import WeavingProduction
 from app.models.product_type import ProductType
+from app.models.area import Area
+from app.models.machine_status import MachineStatus
+from app.models.machine_type import MachineType
+from app.models.machine_product_history import MachineProductHistory

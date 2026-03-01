@@ -2,231 +2,195 @@ from datetime import datetime
 from fastapi import UploadFile
 from io import BytesIO
 import pandas as pd
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
-from app.models.machine import Machine, MachineStatus, MachineArea
+
+# [CẬP NHẬT] Đổi MachineArea thành Area
+from app.models.machine import Machine, WeavingMachine, DyeingMachine
+from app.models.machine_type import MachineType
+from app.models.machine_status import MachineStatus
+from app.models.area import Area 
 from app.schemas.machine_schema import MachineCreate, MachineUpdate
 from app.models.machine_log import MachineLog
 
-
-# =========================
-# GET LIST
-# =========================
-def get_machines(
-    db: Session,
-    skip: int = 0,
-    limit: int = 100
-):
+def get_machines(db: Session, skip: int = 0, limit: int = 100):
     return (
         db.query(Machine)
+        .options(
+            joinedload(Machine.machine_type),
+            joinedload(Machine.status),
+            joinedload(Machine.area)
+        )
         .offset(skip)
         .limit(limit)
         .all()
     )
 
-
-# =========================
-# GET ONE (BY ID)
-# =========================
 def get_machine(db: Session, machine_id: int):
-    return db.get(Machine, machine_id)
+    return db.query(Machine).options(
+        joinedload(Machine.machine_type),
+        joinedload(Machine.status),
+        joinedload(Machine.area)
+    ).filter(Machine.machine_id == machine_id).first()
 
-
-# =========================
-# SEARCH (TÊN / MỤC ĐÍCH / TRẠNG THÁI / KHU VỰC)
-# =========================
 def search_machines(
     db: Session,
     keyword: str | None = None,
-    status: MachineStatus | None = None, # Dùng Enum type hint
-    area: MachineArea | None = None,     # Thêm bộ lọc khu vực
+    status_id: int | None = None, 
+    area_id: int | None = None, 
     skip: int = 0,
     limit: int = 100
 ):
-    query = db.query(Machine)
+    query = db.query(Machine).options(
+        joinedload(Machine.machine_type),
+        joinedload(Machine.status),
+        joinedload(Machine.area)
+    )
 
-    # 1. Lọc theo từ khóa (Tên máy hoặc Mục đích sử dụng)
     if keyword:
-        keyword_filter = f"%{keyword}%"
-        query = query.filter(
+        # Tự động JOIN với Area để tìm kiếm theo tên Khu vực
+        query = query.outerjoin(MachineType).outerjoin(Area).filter(
             or_(
-                Machine.machine_name.ilike(keyword_filter),
-                Machine.purpose.ilike(keyword_filter)
+                Machine.machine_name.ilike(f"%{keyword}%"),
+                Machine.serial_number.ilike(f"%{keyword}%"),
+                MachineType.type_name.ilike(f"%{keyword}%"),
+                Area.area_name.ilike(f"%{keyword}%")
             )
         )
 
-    # 2. Lọc theo trạng thái (nếu có)
-    if status:
-        query = query.filter(Machine.status == status)
+    if status_id:
+        query = query.filter(Machine.status_id == status_id)
+    if area_id:
+        query = query.filter(Machine.area_id == area_id)
 
-    # 3. Lọc theo khu vực (nếu có)
-    if area:
-        query = query.filter(Machine.area == area)
+    return query.offset(skip).limit(limit).all()
 
-    return (
-        query
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
-
-
-# =========================
-# CREATE
-# =========================
 def create_machine(db: Session, data: MachineCreate):
-    # data.model_dump() sẽ tự động convert Enum thành value string tương ứng nếu cần
-    machine = Machine(**data.model_dump())
+    dump_data = data.model_dump(exclude_none=True)
+    poly_type = dump_data.get("polymorphic_type", "base_machine")
+    
+    if poly_type == "weaving_machine":
+        machine = WeavingMachine(**dump_data)
+    elif poly_type == "dyeing_machine":
+        machine = DyeingMachine(**dump_data)
+    else:
+        machine = Machine(**dump_data)
+
     db.add(machine)
     db.commit()
     db.refresh(machine)
-    return machine
+    return get_machine(db, machine.machine_id)
 
+def update_machine(db: Session, machine_id: int, data: MachineUpdate):
+    machine = db.get(Machine, machine_id)
+    if not machine: return None
 
-# =========================
-# UPDATE
-# =========================
-def update_machine(
-    db: Session,
-    machine_id: int,
-    data: MachineUpdate
-):
-    machine = get_machine(db, machine_id)
-    if not machine:
-        return None
-
-    # exclude_unset=True: Chỉ lấy những trường người dùng gửi lên
     update_data = data.model_dump(exclude_unset=True)
-
     for k, v in update_data.items():
         setattr(machine, k, v)
 
     db.commit()
     db.refresh(machine)
-    return machine
+    return get_machine(db, machine_id)
 
-
-# =========================
-# DELETE
-# =========================
 def delete_machine(db: Session, machine_id: int):
-    machine = get_machine(db, machine_id)
-    if not machine:
-        return False
-
+    machine = db.get(Machine, machine_id)
+    if not machine: return False
     db.delete(machine)
     db.commit()
     return True
 
-
-# =========================
-# UPDATE STATUS (LOGIC QUAN TRỌNG - GIỮ LẠI TỪ HEAD)
-# =========================
 def update_machine_status(
-    db: Session, 
-    machine_id: int, 
-    new_status: str, 
-    reason: str = None, 
-    image_url: str = None
+    db: Session, machine_id: int, status_name: str, reason: str = None, image_url: str = None
 ):
-    # [SỬA LỖI]: Đổi Machine.id thành Machine.machine_id
-    machine = db.query(Machine).filter(Machine.machine_id == machine_id).first()
-    
-    if not machine:
-        return None
+    machine = db.get(Machine, machine_id)
+    if not machine: return None
 
-    # Nếu trạng thái không đổi thì không cần làm gì
-    if machine.status == new_status:
-        return machine
+    status_record = db.query(MachineStatus).filter(MachineStatus.status_name.ilike(status_name)).first()
+    if not status_record:
+        status_record = MachineStatus(status_name=status_name)
+        db.add(status_record)
+        db.flush()
+
+    new_status_id = status_record.status_id
+    if machine.status_id == new_status_id: return machine
 
     current_time = datetime.now()
 
-    # 2. Tìm log cũ đang mở (end_time là Null) và ĐÓNG NÓ LẠI
     last_log = db.query(MachineLog).filter(
-        MachineLog.machine_id == machine_id,
-        MachineLog.end_time == None
+        MachineLog.machine_id == machine_id, MachineLog.end_time == None
     ).order_by(MachineLog.start_time.desc()).first()
 
-    if last_log:
-        last_log.end_time = current_time
+    if last_log: last_log.end_time = current_time
 
-    # 3. TẠO LOG MỚI
     new_log = MachineLog(
-        machine_id=machine_id,
-        status=new_status,
-        start_time=current_time,
-        end_time=None, # Đang diễn ra
-        reason=reason,
-        image_url=image_url
+        machine_id=machine_id, status=status_name, start_time=current_time,
+        end_time=None, reason=reason, image_url=image_url
     )
     db.add(new_log)
 
-    # 4. Cập nhật trạng thái hiện tại vào bảng Machine
-    machine.status = new_status
-    
+    machine.status_id = new_status_id
     db.commit()
-    db.refresh(machine)
-    return machine
+    return get_machine(db, machine_id)
 
-
-# =========================
-# GET HISTORY
-# =========================
 def get_machine_history(db: Session, machine_id: int, limit: int = 20):
-    return db.query(MachineLog)\
-        .filter(MachineLog.machine_id == machine_id)\
-        .order_by(MachineLog.start_time.desc())\
-        .limit(limit)\
-        .all()
+    return db.query(MachineLog).filter(MachineLog.machine_id == machine_id).order_by(MachineLog.start_time.desc()).limit(limit).all()
 
-# =========================
-# GET BY NAME (Tiện ích check trùng)
-# =========================
-def get_machine_by_name(db: Session, machine_name: str):
-    return db.query(Machine).filter(Machine.machine_name == machine_name).first()
-
-# =========================
-# EXCEL IMPORT
-# =========================
+# EXCEL IMPORT (THÔNG MINH - TỰ ĐỘNG TẠO MASTER DATA)
 def import_machines_from_excel(db: Session, file: UploadFile):
     try:
-        # header=1 vì dòng 1 là Title "WEAVING MACHINE INFOMATION", dòng 2 mới là cột Header
         df = pd.read_excel(file.file, header=1)
-        
-        # [QUAN TRỌNG] Xóa khoảng trắng thừa ở đầu/cuối của tất cả các Tên Cột
-        # Đề phòng trường hợp file Excel gõ nhầm "MACHINE NAME " (dư 1 dấu cách)
         df.columns = df.columns.str.strip()
-        
-        # Thay thế các ô trống (NaN) thành None
         df = df.where(pd.notnull(df), None)
-        
     except Exception as e:
         return {"status": False, "message": f"Lỗi đọc file Excel: {str(e)}"}
 
     success_count = 0
     error_rows = []
 
-    # Lấy danh sách các giá trị hợp lệ của Khu vực (Enum)
-    valid_areas = [e.value for e in MachineArea]
+    # Cache
+    areas_map = {a.area_name.strip().lower(): a.area_id for a in db.query(Area).all()}
+    status_map = {s.status_name.strip().lower(): s.status_id for s in db.query(MachineStatus).all()}
+    existing_machines = {m.machine_name.strip().lower() for m in db.query(Machine.machine_name).all()}
+    excel_current_machines = set()
 
     for index, row in df.iterrows():
-        excel_row_num = index + 3 # Dòng thực tế trên file Excel
+        excel_row_num = index + 3
 
-        # Lấy tên máy
         machine_name = str(row.get('MACHINE NAME', '')).strip()
-        if not machine_name or machine_name == 'None':
-            continue # Bỏ qua dòng trống
+        if not machine_name or machine_name == 'None': continue
 
-        # 1. Kiểm tra trùng lặp tên máy
-        if get_machine_by_name(db, machine_name):
+        machine_name_lower = machine_name.lower()
+        if machine_name_lower in existing_machines or machine_name_lower in excel_current_machines:
             error_rows.append(f"Dòng {excel_row_num}: Máy '{machine_name}' đã tồn tại.")
             continue
 
-        # 2. Xử lý Enum Khu Vực
-        area_str = str(row.get('AREA', '')).strip()
-        area_val = area_str if area_str in valid_areas else None
+        excel_current_machines.add(machine_name_lower)
 
-        # 3. Ép kiểu dữ liệu an toàn
+        # Xử lý Khu vực bằng bảng Area
+        area_str = str(row.get('AREA', '')).strip()
+        area_id = None
+        if area_str and area_str != 'None':
+            area_key = area_str.lower()
+            if area_key not in areas_map:
+                new_area = Area(area_name=area_str)
+                db.add(new_area)
+                db.flush()
+                areas_map[area_key] = new_area.area_id
+            area_id = areas_map[area_key]
+
+        # Xử lý Trạng thái
+        status_str = str(row.get('STATUS', 'STOPPED')).strip()
+        status_id = None
+        if status_str and status_str != 'None':
+            status_key = status_str.lower()
+            if status_key not in status_map:
+                new_status = MachineStatus(status_name=status_str)
+                db.add(new_status)
+                db.flush()
+                status_map[status_key] = new_status.status_id
+            status_id = status_map[status_key]
+
         try:
             lines_val = row.get('TOTAL LINE')
             total_lines = int(float(lines_val)) if pd.notnull(lines_val) and str(lines_val).strip() != '' else None
@@ -237,14 +201,14 @@ def import_machines_from_excel(db: Session, file: UploadFile):
             serial_val = str(row.get('SERI NUMBER', '')).strip()
             serial_number = serial_val if serial_val != 'None' and serial_val != '' else None
 
-            # 4. Insert DB
-            new_machine = Machine(
+            new_machine = WeavingMachine(
                 machine_name=machine_name,
                 total_lines=total_lines,
                 serial_number=serial_number,
                 speed=speed,
-                area=area_val,
-                status=MachineStatus.STOPPED # Mặc định máy mới là STOPPED
+                area_id=area_id,
+                status_id=status_id,
+                polymorphic_type="weaving_machine"
             )
             db.add(new_machine)
             success_count += 1
@@ -253,35 +217,29 @@ def import_machines_from_excel(db: Session, file: UploadFile):
             error_rows.append(f"Dòng {excel_row_num}: Lỗi định dạng dữ liệu ({str(e)})")
 
     db.commit()
-    
-    return {
-        "status": True, 
-        "success_count": success_count, 
-        "errors": error_rows
-    }
+    return {"status": True, "success_count": success_count, "errors": error_rows}
 
-# =========================
-# EXCEL EXPORT
-# =========================
 def export_machines_to_excel(db: Session):
-    machines = db.query(Machine).all()
+    machines = db.query(Machine).options(joinedload(Machine.area), joinedload(Machine.status)).all()
 
-    # Tạo data map với các cột chuẩn theo mẫu Excel "WEAVING MACHINE INFOMATION" của bạn
     data = []
     for m in machines:
-        data.append({
+        row_data = {
             "MACHINE NAME": m.machine_name,
-            "TOTAL LINE": m.total_lines,
             "SERI NUMBER": m.serial_number,
-            "MAX SPEED (round/ minute)": m.speed,
-            "AREA": m.area.value if m.area else "",  # Lấy giá trị chuỗi của Enum (VD: "Khu A")
-            "PURPOSE": m.purpose,
-            "STATUS": m.status.value if m.status else ""
-        })
+            "AREA": m.area.area_name if m.area else "",
+            "STATUS": m.status.status_name if m.status else "",
+            "TYPE": m.polymorphic_type
+        }
+        
+        if isinstance(m, WeavingMachine):
+            row_data["TOTAL LINE"] = m.total_lines
+            row_data["MAX SPEED (round/ minute)"] = m.speed
+            row_data["PURPOSE"] = m.purpose
+
+        data.append(row_data)
 
     df = pd.DataFrame(data)
-    
-    # Chuẩn hóa file Excel trên RAM (không lưu xuống ổ cứng)
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Machines')

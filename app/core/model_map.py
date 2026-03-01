@@ -25,10 +25,17 @@ from app.models.material_export import MaterialExport,MaterialExportDetail
 from app.models.machine_log import MachineLog
 from app.models.weaving_production import WeavingProduction
 from app.models.product_type import ProductType
+from app.models.machine_type import MachineType
+from app.models.machine_status import MachineStatus
+from app.models.area import Area
+from app.models.machine_product_history import MachineProductHistory
 # Import thêm các model khác của bạn ở đây...
 
 # Dictionary ánh xạ: "tên_bảng" -> ModelClass
 MODEL_MAPPING = {
+    "machine_types": MachineType,
+    "machine_statuses": MachineStatus,
+    "areas": Area,
     "machines": Machine,
     "products": Product,
     "users": User,
@@ -59,7 +66,8 @@ MODEL_MAPPING = {
     "material_export_details":MaterialExportDetail,
     "machine_logs":MachineLog,
     "weaving_productions":WeavingProduction,
-    "product_types":ProductType
+    "product_types":ProductType,
+    "machine_product_histories": MachineProductHistory
     # Thêm các bảng khác vào đây...
 }
 

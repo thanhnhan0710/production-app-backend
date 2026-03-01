@@ -8,19 +8,18 @@ class WeavingProduction(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    # --- LIÊN KẾT MÁY (MACHINE) ---
-    # Thay vì lưu machine_code, ta lưu machine_id
-    machine_id = Column(Integer, ForeignKey("machines.machine_id"), nullable=False)
+    # --- LIÊN KẾT MÁY DỆT (WEAVING MACHINE) ---
+    # [CẬP NHẬT] Đổi ForeignKey trỏ thẳng vào bảng weaving_machines thay vì machines
+    # Điều này đảm bảo tính toàn vẹn: Chỉ máy dệt mới có sản lượng dệt.
+    machine_id = Column(Integer, ForeignKey("weaving_machines.machine_id"), nullable=False)
     
-    # Line vẫn giữ nguyên (vì 1 máy có thể có nhiều line 1, 2...)
+    # Line vẫn giữ nguyên (vì 1 máy dệt có thể có nhiều line 1, 2...)
     line = Column(Integer, nullable=False) 
 
     # --- LIÊN KẾT RỔ (BASKET) ---
-    # Thay vì lưu basket_code, ta lưu basket_id
     basket_id = Column(Integer, ForeignKey("baskets.basket_id"), nullable=False)
 
     # --- LIÊN KẾT CA (SHIFT) ---
-    # Lưu ý: Bảng Shift của bạn dùng shift_id làm khóa chính
     shift_id = Column(Integer, ForeignKey("shifts.shift_id"), nullable=True)
 
     # --- SỐ LIỆU SẢN XUẤT ---
@@ -36,8 +35,8 @@ class WeavingProduction(Base):
     # QUAN HỆ (RELATIONSHIPS)
     # ==========================================
     
-    # 1. Quan hệ với Máy
-    machine = relationship("Machine", back_populates="weaving_productions")
+    # 1. Quan hệ với Máy Dệt (Trỏ tới Class WeavingMachine thay vì Machine)
+    machine = relationship("WeavingMachine", back_populates="weaving_productions")
 
     # 2. Quan hệ với Rổ
     basket = relationship("Basket", back_populates="weaving_productions")

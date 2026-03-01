@@ -2,7 +2,8 @@ from fastapi import APIRouter
 from app.api.v1.endpoints import (
     batches,
     departments,
-    employees, 
+    employees,
+    machine_statuses, 
     suppliers,
     materials,
     machines,
@@ -30,7 +31,11 @@ from app.api.v1.endpoints import (
     material_exports,
     weaving_productions,
     logs,
-    product_types
+    product_types,
+    machine_types,
+    areas,
+    machine_statuses,
+    machine_assignments,
 )
 
 api_router = APIRouter()
@@ -67,4 +72,7 @@ api_router.include_router(material_exports.router, prefix="/material-exports", t
 api_router.include_router(weaving_productions.router, prefix="/weaving-productions", tags=["Weaving Productions"])
 api_router.include_router(logs.router, prefix="/logs", tags=["logs"])
 api_router.include_router(product_types.router, prefix="/product-types", tags=["Product Types"])
-
+api_router.include_router(machine_types.router, prefix="/machine-types", tags=["Machine Types"])
+api_router.include_router(machine_statuses.router, prefix="/machine-statuses", tags=["Machine Statuses"])
+api_router.include_router(areas.router, prefix="/areas", tags=["Areas"])
+api_router.include_router(machine_assignments.router, prefix="/machine-assignments", tags=["Machine Assignments"])

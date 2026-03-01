@@ -1,40 +1,53 @@
 from pydantic import BaseModel
 from typing import Optional
-from app.models.machine import MachineStatus, MachineArea  # Import Enum từ model
+
+# Import các Schema danh mục
+from app.schemas.machine_type_schema import MachineTypeResponse
+from app.schemas.machine_status_schema import MachineStatusResponse
+from app.schemas.area_schema import AreaResponse # [CẬP NHẬT]
 
 class MachineBase(BaseModel):
     machine_name: str
-    total_lines: Optional[int] = None
-    purpose: Optional[str] = None
-    
-    # [MỚI THÊM]
     serial_number: Optional[str] = None
-    speed: Optional[int] = None
     
-    status: MachineStatus = MachineStatus.STOPPED 
-    area: Optional[MachineArea] = None
+    machine_type_id: Optional[int] = None
+    status_id: Optional[int] = None
+    area_id: Optional[int] = None
+
+    polymorphic_type: str 
+
+    # --- Trường đặc thù Máy Dệt ---
+    total_lines: Optional[int] = None
+    speed: Optional[int] = None
+    purpose: Optional[str] = None
+
+    # --- Trường đặc thù Máy Nhuộm ---
+    capacity_kg: Optional[float] = None
+    max_temperature: Optional[float] = None
 
 class MachineCreate(MachineBase):
     pass
 
 class MachineUpdate(BaseModel):
     machine_name: Optional[str] = None
+    serial_number: Optional[str] = None
+    machine_type_id: Optional[int] = None
+    status_id: Optional[int] = None
+    area_id: Optional[int] = None
+    
     total_lines: Optional[int] = None
+    speed: Optional[int] = None
     purpose: Optional[str] = None
     
-    # Cho phép cập nhật từng phần (Optional)
-    status: Optional[MachineStatus] = None
-    area: Optional[MachineArea] = None
+    capacity_kg: Optional[float] = None
+    max_temperature: Optional[float] = None
 
 class MachineResponse(MachineBase):
     machine_id: int
+    
+    machine_type: Optional[MachineTypeResponse] = None
+    status: Optional[MachineStatusResponse] = None
+    area: Optional[AreaResponse] = None # [CẬP NHẬT]
 
     class Config:
         from_attributes = True
-
-# [GIỮ LẠI TỪ HEAD] Class dùng riêng cho API cập nhật trạng thái (ví dụ: Báo hỏng, Bảo trì)
-class MachineStatusUpdate(BaseModel):
-    # Mình sửa từ 'str' thành 'MachineStatus' để validate chặt chẽ hơn
-    status: MachineStatus 
-    reason: Optional[str] = None
-    image_url: Optional[str] = None
