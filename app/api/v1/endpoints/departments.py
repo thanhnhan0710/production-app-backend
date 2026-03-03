@@ -53,6 +53,9 @@ def delete_department(
     # [MỚI] Bắn tín hiệu làm mới
     background_tasks.add_task(ws_manager.broadcast, "REFRESH_DEPARTMENTS")
     return {"message": "Deleted successfully"}
+@router.get("/count", response_model=int)
+def get_department_count(db: Session = Depends(deps.get_db)):
+    return department_service.count_departments(db)
 
 @router.get("/search", response_model=List[DepartmentResponse])
 def search_departments(

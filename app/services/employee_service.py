@@ -13,6 +13,8 @@ from sqlalchemy import String
 def get_employees(db: Session, skip: int = 0, limit: int = 100):
     return db.query(Employee).offset(skip).limit(limit).all()
 
+def count_employees(db: Session) -> int:
+    return db.query(Employee).count()
 def create_employee(db: Session, employee: EmployeeCreate):
     try:
         db_emp = Employee(**employee.model_dump())

@@ -1,7 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from datetime import datetime
+import pandas as pd
+
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
 from app.api import deps
 from app.models.machine import Machine
@@ -9,6 +13,7 @@ from app.models.product import Product
 from app.schemas.machine_product_history_schema import MachineProductHistoryResponse, MachineProductAssign, MachineProductHistoryUpdate
 from app.services import machine_product_history_service
 from app.core.websockets import ws_manager
+import io
 
 router = APIRouter()
 
@@ -37,10 +42,6 @@ def get_current_product(machine_id: int, db: Session = Depends(deps.get_db)):
     if not result:
         raise HTTPException(status_code=404, detail="Máy đang trống, không chạy sản phẩm nào")
     return result
-
-@router.get("/{machine_id}/history", response_model=List[MachineProductHistoryResponse])
-def get_history(machine_id: int, skip: int = 0, limit: int = 50, db: Session = Depends(deps.get_db)):
-    return machine_product_history_service.get_machine_history(db, machine_id, skip, limit)
 
 # ==========================================
 # [MỚI] API ENDPOINTS CHO SỬA, XÓA, TÌM KIẾM
@@ -72,9 +73,19 @@ def delete_history(history_id: int, background_tasks: BackgroundTasks, db: Sessi
     background_tasks.add_task(ws_manager.broadcast, f"REFRESH_MACHINE_{machine_id}_PRODUCT")
     return {"message": "Đã xóa bản ghi lịch sử thành công"}
 
-# 1. API lấy toàn bộ lịch sử của TẤT CẢ các máy (Global History)
+# ==========================================
+# [CẬP NHẬT] API LỊCH SỬ CÓ LỌC NGÀY & PHÂN TRANG
+# ==========================================
+
 @router.get("/history/all/global", response_model=List[MachineProductHistoryResponse])
-def get_global_history(keyword: str = None, skip: int = 0, limit: int = 100, db: Session = Depends(deps.get_db)):
+def get_global_history(
+    keyword: Optional[str] = None, 
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    skip: int = Query(0, ge=0), 
+    limit: int = Query(50, le=500), 
+    db: Session = Depends(deps.get_db)
+):
     query = db.query(machine_product_history_service.MachineProductHistory)\
               .options(
                   machine_product_history_service.joinedload(machine_product_history_service.MachineProductHistory.product),
@@ -82,15 +93,97 @@ def get_global_history(keyword: str = None, skip: int = 0, limit: int = 100, db:
               )
     
     if keyword:
-        # Cho phép tìm theo tên máy HOẶC mã sản phẩm
         query = query.join(Product).join(Machine).filter(
             or_(
                 Product.item_code.ilike(f"%{keyword}%"),
                 Machine.machine_name.ilike(f"%{keyword}%")
             )
         )
+    
+    if start_date:
+        query = query.filter(machine_product_history_service.MachineProductHistory.start_time >= start_date)
+    if end_date:
+        query = query.filter(machine_product_history_service.MachineProductHistory.start_time <= end_date)
+        
     return query.order_by(machine_product_history_service.MachineProductHistory.start_time.desc()).offset(skip).limit(limit).all()
 
+@router.get("/{machine_id}/history", response_model=List[MachineProductHistoryResponse])
+def get_machine_history(
+    machine_id: int, 
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    skip: int = Query(0, ge=0), 
+    limit: int = Query(50, le=500), 
+    db: Session = Depends(deps.get_db)
+):
+    query = db.query(machine_product_history_service.MachineProductHistory)\
+             .options(machine_product_history_service.joinedload(machine_product_history_service.MachineProductHistory.product))\
+             .filter(machine_product_history_service.MachineProductHistory.machine_id == machine_id)
+             
+    if start_date:
+        query = query.filter(machine_product_history_service.MachineProductHistory.start_time >= start_date)
+    if end_date:
+        query = query.filter(machine_product_history_service.MachineProductHistory.start_time <= end_date)
+
+    return query.order_by(machine_product_history_service.MachineProductHistory.start_time.desc()).offset(skip).limit(limit).all()
+
+# ==========================================
+# [MỚI] API XUẤT EXCEL
+# ==========================================
+def _generate_excel_response(data: list, filename: str):
+    df = pd.DataFrame(data)
+    stream = io.BytesIO()
+    with pd.ExcelWriter(stream, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='LichSu')
+    stream.seek(0)
+    return StreamingResponse(
+        stream, 
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
+        headers={"Content-Disposition": f"attachment; filename={filename}.xlsx"}
+    )
+
+@router.get("/export/global")
+def export_global_history(
+    keyword: Optional[str] = None, 
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    db: Session = Depends(deps.get_db)
+):
+    # Lấy toàn bộ không limit để xuất Excel
+    records = get_global_history(keyword, start_date, end_date, skip=0, limit=10000, db=db)
+    
+    export_data = []
+    for r in records:
+        export_data.append({
+            "Tên Máy": r.machine.machine_name if r.machine else f"ID {r.machine_id}",
+            "Mã Hàng": r.product.item_code if r.product else "N/A",
+            "Ghi chú SP": r.product.note if r.product else "",
+            "Thời gian Bắt đầu": r.start_time.strftime("%Y-%m-%d %H:%M:%S") if r.start_time else "",
+            "Thời gian Kết thúc": r.end_time.strftime("%Y-%m-%d %H:%M:%S") if r.end_time else "ĐANG CHẠY",
+            "Ghi chú": r.notes or ""
+        })
+        
+    return _generate_excel_response(export_data, "LichSu_ToanXuong")
+
+@router.get("/export/{machine_id}")
+def export_single_machine_history(
+    machine_id: int,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    db: Session = Depends(deps.get_db)
+):
+    records = get_machine_history(machine_id, start_date, end_date, skip=0, limit=10000, db=db)
+    
+    export_data = []
+    for r in records:
+        export_data.append({
+            "Mã Hàng": r.product.item_code if r.product else "N/A",
+            "Thời gian Bắt đầu": r.start_time.strftime("%Y-%m-%d %H:%M:%S") if r.start_time else "",
+            "Thời gian Kết thúc": r.end_time.strftime("%Y-%m-%d %H:%M:%S") if r.end_time else "ĐANG CHẠY",
+            "Ghi chú": r.notes or ""
+        })
+        
+    return _generate_excel_response(export_data, f"LichSu_May_{machine_id}")
 # 2. API lấy danh sách các máy ĐANG CHẠY (để hiển thị lên Dashboard)
 @router.get("/status/active-all", response_model=List[MachineProductHistoryResponse])
 def get_all_active_assignments(db: Session = Depends(deps.get_db)):

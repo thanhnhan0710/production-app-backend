@@ -5,6 +5,8 @@ from sqlalchemy import or_
 
 def get_departments(db: Session, skip: int = 0, limit: int = 100):
     return db.query(Department).offset(skip).limit(limit).all()
+def count_departments(db: Session) -> int:
+    return db.query(Department).count()
 
 # =========================
 # GET ONE

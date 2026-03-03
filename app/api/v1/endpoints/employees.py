@@ -35,6 +35,10 @@ def read_employees_by_department(
 ):
     return employee_service.get_employees_by_department(db, department_id, skip, limit)
 
+@router.get("/count", response_model=int)
+def get_employee_count(db: Session = Depends(deps.get_db)):
+    return employee_service.count_employees(db)
+
 @router.put("/{emp_id}", response_model=EmployeeResponse)
 def update_employee(
     emp_id: int, 
