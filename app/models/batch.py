@@ -23,7 +23,7 @@ class Batch(Base):
     batch_id = Column(Integer, primary_key=True, index=True)
     internal_batch_code = Column(String(50), unique=True, index=True, nullable=False)
     supplier_batch_no = Column(String(100), index=True, nullable=False)
-    material_id = Column(Integer, ForeignKey("materials.id"), nullable=False)
+    material_id = Column(Integer, ForeignKey("materials.material_id"), nullable=False)
     
     # --- KHÔNG CẦN THÊM supplier_id NỮA ---
     

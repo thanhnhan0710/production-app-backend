@@ -10,7 +10,7 @@ class InventoryStock(Base):
     id = Column(Integer, primary_key=True, index=True)
     
     # Tồn kho được định danh bởi bộ 3: Vật tư - Kho - Lô
-    material_id = Column(Integer, ForeignKey("materials.id"), nullable=False)
+    material_id = Column(Integer, ForeignKey("materials.material_id"), nullable=False)
     warehouse_id = Column(Integer, ForeignKey("warehouses.warehouse_id"), nullable=False)
     batch_id = Column(Integer, ForeignKey("batches.batch_id"), nullable=False)
     

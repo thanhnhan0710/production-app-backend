@@ -21,7 +21,7 @@ class BOMDetail(Base):
 
     detail_id = Column(Integer, primary_key=True, index=True)
     bom_id = Column(Integer, ForeignKey("bom_headers.bom_id"), nullable=False)
-    material_id = Column(Integer, ForeignKey("materials.id"), nullable=False)
+    material_id = Column(Integer, ForeignKey("materials.material_id"), nullable=False)
     
     component_type = Column(
         Enum(

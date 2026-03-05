@@ -57,7 +57,7 @@ class PurchaseOrderDetail(Base):
     detail_id = Column(Integer, primary_key=True, index=True)
     
     po_id = Column(Integer, ForeignKey("purchase_orders.po_id"), nullable=False)
-    material_id = Column(Integer, ForeignKey("materials.id"), nullable=False)
+    material_id = Column(Integer, ForeignKey("materials.material_id"), nullable=False)
     
     quantity = Column(Float, nullable=False) # Số lượng mua
     quantity_rolls = Column(Integer, default=0)

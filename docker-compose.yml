@@ -1,35 +1,37 @@
 services:
   backend:
+    container_name: owvds-backend       # Tên riêng không đụng với nhánh cũ
     build: .
     ports:
-      - "8000:8000"
+      - "8002:8000"                     # Đổi port host sang 8002 (nhánh kia là 8001)
     volumes:
       - .:/app
-      - ./static:/app/static  # Chuyển static sang đây
-    environment:
-      DATABASE_URL: mysql+pymysql://root:Mysql%402025@db:3306/production_management
-      SECRET_KEY: AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-GGGG
+      - ./static:/app/static
+    env_file:                           # <--- Tự động nạp toàn bộ biến từ file .env
+      - .env
     depends_on:
       db:
         condition: service_healthy
     restart: on-failure
 
   db:
-    image: mysql:8.4  # Sử dụng bản LTS cho ổn định
+    container_name: owvds-db            # Tên riêng cho DB
+    image: mysql:8.4
     restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: Mysql@2025
-      MYSQL_DATABASE: production_management
+    env_file:                           # <--- Tự động nạp MYSQL_ROOT_PASSWORD và MYSQL_DATABASE
+      - .env
     ports:
-      - "3307:3306"
+      - "3308:3306"                     # Đổi port host sang 3308 (nhánh kia là 3307)
     volumes:
-      - mysql_data:/var/lib/mysql
+      - mysql_data_owvds:/var/lib/mysql # <--- Volume mới hoàn toàn cho schema của owvds
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pMysql@2025"]
+      # Dùng $$MYSQL_ROOT_PASSWORD để Docker lấy biến môi trường bên trong container, 
+      # giúp bạn không bị lộ mật khẩu rành rành trong file này.
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 20s
 
 volumes:
-  mysql_data:
+  mysql_data_owvds:                     # Khai báo volume độc lập mới

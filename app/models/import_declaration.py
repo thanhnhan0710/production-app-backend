@@ -50,7 +50,7 @@ class ImportDeclarationDetail(Base):
     declaration_id = Column(Integer, ForeignKey("import_declarations.id"), nullable=False)
     
     # Liên kết với Vật tư
-    material_id = Column(Integer, ForeignKey("materials.id"), nullable=False)
+    material_id = Column(Integer, ForeignKey("materials.material_id"), nullable=False)
     
     # (Tùy chọn) Liên kết với PO để biết hàng này về của đơn mua nào
     po_detail_id = Column(Integer, ForeignKey("purchase_order_details.detail_id"), nullable=True)

@@ -45,7 +45,7 @@ class MaterialExportDetail(Base):
     detail_id = Column(Integer, primary_key=True, index=True)
     export_id = Column(Integer, ForeignKey("material_exports.id"), nullable=False)
     
-    material_id = Column(Integer, ForeignKey("materials.id"), nullable=False)
+    material_id = Column(Integer, ForeignKey("materials.material_id"), nullable=False)
     batch_id = Column(Integer, ForeignKey("batches.batch_id"), nullable=False)
     quantity = Column(Float, nullable=False)
     

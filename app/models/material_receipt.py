@@ -42,7 +42,7 @@ class MaterialReceiptDetail(Base):
     detail_id = Column(Integer, primary_key=True, index=True)
     
     receipt_id = Column(Integer, ForeignKey("material_receipts.receipt_id"), nullable=False)
-    material_id = Column(Integer, ForeignKey("materials.id"), nullable=False)
+    material_id = Column(Integer, ForeignKey("materials.material_id"), nullable=False)
     
     # Số lượng PO (Tham khảo)
     po_quantity_kg = Column(Float, default=0.0, comment="SL Kg trên chứng từ")
