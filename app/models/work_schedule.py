@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Date, ForeignKey
+from sqlalchemy import Column, Integer, Date, ForeignKey, Float
 from sqlalchemy.orm import relationship
 from app.db.base_class import Base
 
@@ -11,6 +11,9 @@ class WorkSchedule(Base):
     # Khóa ngoại liên kết
     employee_id = Column(Integer, ForeignKey("employees.employee_id"), nullable=False) 
     shift_id = Column(Integer, ForeignKey("shifts.shift_id"), nullable=False)       
+
+    # [MỚI] Trường lưu số giờ tăng ca (Mặc định = 0.0)
+    overtime_hours = Column(Float, default=0.0)
 
     # Thiết lập quan hệ (Relationships) để truy vấn ngược
     employee = relationship("Employee", back_populates="work_schedules")

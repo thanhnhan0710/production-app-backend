@@ -35,3 +35,4 @@ from app.models.area import Area
 from app.models.machine_status import MachineStatus
 from app.models.machine_type import MachineType
 from app.models.machine_product_history import MachineProductHistory
+from app.models.employee_group import EmployeeGroup

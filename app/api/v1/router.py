@@ -36,6 +36,7 @@ from app.api.v1.endpoints import (
     areas,
     machine_statuses,
     machine_assignments,
+    employee_groups,
 )
 
 api_router = APIRouter()
@@ -76,3 +77,4 @@ api_router.include_router(machine_types.router, prefix="/machine-types", tags=["
 api_router.include_router(machine_statuses.router, prefix="/machine-statuses", tags=["Machine Statuses"])
 api_router.include_router(areas.router, prefix="/areas", tags=["Areas"])
 api_router.include_router(machine_assignments.router, prefix="/machine-assignments", tags=["Machine Assignments"])
+api_router.include_router(employee_groups.router, prefix="/employee-groups", tags=["Employee Groups"])

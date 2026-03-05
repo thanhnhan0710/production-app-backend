@@ -39,6 +39,15 @@ def read_employees_by_department(
 def get_employee_count(db: Session = Depends(deps.get_db)):
     return employee_service.count_employees(db)
 
+@router.get("/group/{group_id}", response_model=List[EmployeeResponse])
+def read_employees_by_group(
+    group_id: int,
+    skip: int = 0, 
+    limit: int = 100, 
+    db: Session = Depends(deps.get_db)
+):
+    return employee_service.get_employees_by_group(db, group_id, skip, limit)
+
 @router.put("/{emp_id}", response_model=EmployeeResponse)
 def update_employee(
     emp_id: int, 

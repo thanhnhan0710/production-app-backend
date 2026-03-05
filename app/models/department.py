@@ -11,3 +11,6 @@ class Department(Base):
 
     # Quan hệ 1-n: Một phòng ban có nhiều nhân viên
     employees = relationship("Employee", back_populates="department")
+    
+    # [MỚI] Quan hệ 1-n: Một phòng ban có nhiều Tổ
+    groups = relationship("EmployeeGroup", back_populates="department", cascade="all, delete-orphan")

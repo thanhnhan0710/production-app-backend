@@ -27,6 +27,7 @@ class WorkScheduleBase(BaseModel):
     work_date: date = Field(..., description="Ngày làm việc (YYYY-MM-DD)")
     employee_id: int = Field(..., description="ID Nhân viên")
     shift_id: int = Field(..., description="ID Ca làm việc")
+    overtime_hours: Optional[float] = Field(0.0, description="Số giờ tăng ca") # [MỚI]
 
 # =======================
 # CREATE
@@ -41,6 +42,7 @@ class WorkScheduleUpdate(BaseModel):
     work_date: Optional[date] = None
     employee_id: Optional[int] = None
     shift_id: Optional[int] = None
+    overtime_hours: Optional[float] = None # [MỚI]
 
 # =======================
 # RESPONSE

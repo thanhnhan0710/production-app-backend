@@ -29,6 +29,7 @@ from app.models.machine_type import MachineType
 from app.models.machine_status import MachineStatus
 from app.models.area import Area
 from app.models.machine_product_history import MachineProductHistory
+from app.models.employee_group import EmployeeGroup
 # Import thêm các model khác của bạn ở đây...
 
 # Dictionary ánh xạ: "tên_bảng" -> ModelClass
@@ -67,7 +68,8 @@ MODEL_MAPPING = {
     "machine_logs":MachineLog,
     "weaving_productions":WeavingProduction,
     "product_types":ProductType,
-    "machine_product_histories": MachineProductHistory
+    "machine_product_histories": MachineProductHistory,
+    "employee_groups":EmployeeGroup
     # Thêm các bảng khác vào đây...
 }
 

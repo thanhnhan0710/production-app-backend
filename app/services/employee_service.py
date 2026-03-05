@@ -2,19 +2,23 @@ import uuid
 from io import BytesIO
 import pandas as pd
 from sqlalchemy.orm import Session
-from app.models.department import Department
-from app.models.employee import Employee
-from app.schemas.employee_schema import EmployeeCreate, EmployeeUpdate
 from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException, UploadFile
 from sqlalchemy import or_, cast
 from sqlalchemy import String
+
+from app.models.department import Department
+from app.models.employee_group import EmployeeGroup # [MỚI] Import Model Tổ
+from app.models.employee import Employee
+from app.schemas.employee_schema import EmployeeCreate, EmployeeUpdate
+
 
 def get_employees(db: Session, skip: int = 0, limit: int = 100):
     return db.query(Employee).offset(skip).limit(limit).all()
 
 def count_employees(db: Session) -> int:
     return db.query(Employee).count()
+
 def create_employee(db: Session, employee: EmployeeCreate):
     try:
         db_emp = Employee(**employee.model_dump())
@@ -86,7 +90,6 @@ def search_employees(
         .all()
     )
 
-# [MỚI] Hàm lấy nhân viên theo mã bộ phận
 def get_employees_by_department(
     db: Session, 
     department_id: int, 
@@ -101,8 +104,24 @@ def get_employees_by_department(
         .all()
     )
 
+# [MỚI] Hàm lấy nhân viên theo mã Tổ
+def get_employees_by_group(
+    db: Session, 
+    group_id: int, 
+    skip: int = 0, 
+    limit: int = 100
+):
+    return (
+        db.query(Employee)
+        .filter(Employee.group_id == group_id)
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+
 # =========================
-# EXCEL IMPORT (NHÂN VIÊN & PHÒNG BAN)
+# EXCEL IMPORT (NHÂN VIÊN, BỘ PHẬN & TỔ)
 # =========================
 def import_employees_from_excel(db: Session, file: UploadFile):
     try:
@@ -120,9 +139,14 @@ def import_employees_from_excel(db: Session, file: UploadFile):
     success_count = 0
     error_rows = []
 
-    # 1. Cache danh sách phòng ban hiện tại vào Dictionary để tra cứu nhanh
+    # 1. Cache danh sách phòng ban hiện tại vào Dictionary
     departments = db.query(Department).all()
     dept_dict = {d.department_name.strip().lower(): d for d in departments if d.department_name}
+
+    # 2. Cache danh sách tổ hiện tại
+    groups = db.query(EmployeeGroup).all()
+    # Group dict có key là tuple: (department_id, group_name) để tránh trùng tên tổ giữa các phòng
+    group_dict = {(g.department_id, g.group_name.strip().lower()): g for g in groups if g.group_name}
 
     for index, row in df.iterrows():
         excel_row_num = index + 3 # Dòng thực tế trên file Excel
@@ -132,42 +156,51 @@ def import_employees_from_excel(db: Session, file: UploadFile):
             continue # Bỏ qua dòng trống
 
         try:
-            # --- XỬ LÝ PHÒNG BAN (TẠO MỚI NẾU CHƯA CÓ) ---
+            # --- XỬ LÝ PHÒNG BAN ---
             dept_name_raw = str(row.get('Department', '')).strip()
             dept_name = dept_name_raw if dept_name_raw != 'None' and dept_name_raw else "Chưa phân bổ"
-            
             dept_key = dept_name.lower()
             
-            # Nếu phòng ban chưa tồn tại trong DB -> Tạo mới luôn
             if dept_key not in dept_dict:
                 new_dept = Department(department_name=dept_name)
                 db.add(new_dept)
-                db.flush() # Đẩy xuống DB ngay lập tức để lấy department_id (chưa commit)
-                dept_dict[dept_key] = new_dept # Cập nhật lại cache
+                db.flush() 
+                dept_dict[dept_key] = new_dept 
                 
             department_id = dept_dict[dept_key].department_id
 
-            # --- XỬ LÝ DỮ LIỆU NHÂN VIÊN ---
-            # 1. Trích xuất an toàn Số điện thoại
+            # --- XỬ LÝ TỔ NHÂN VIÊN ---
+            group_name_raw = str(row.get('Group', '')).strip()
+            group_id = None
+            
+            if group_name_raw and group_name_raw != 'nan' and group_name_raw != 'None':
+                group_key = (department_id, group_name_raw.lower())
+                if group_key not in group_dict:
+                    new_group = EmployeeGroup(group_name=group_name_raw, department_id=department_id)
+                    db.add(new_group)
+                    db.flush()
+                    group_dict[group_key] = new_group
+                group_id = group_dict[group_key].group_id
+
+            # --- XỬ LÝ DỮ LIỆU NHÂN VIÊN KHÁC ---
             phone_val = row.get('Phone Number')
             if pd.isnull(phone_val) or str(phone_val).strip() in ['', 'nan', 'None']:
                 phone = None
             else:
                 phone = str(phone_val).split('.')[0].strip()
 
-            # 2. [ĐÃ SỬA] Trích xuất an toàn Email (Bỏ logic tạo email ảo)
             email_val = row.get('Email')
             if pd.isnull(email_val) or str(email_val).strip() in ['', 'nan', 'None']:
                 email = None
             else:
                 email = str(email_val).strip()
 
-            # [ĐÃ SỬA] Chỉ kiểm tra trùng email nếu email có giá trị (không phải None)
             if email is not None:
                 existing_emp = db.query(Employee).filter(Employee.email == email).first()
                 if existing_emp:
                     error_rows.append(f"Dòng {excel_row_num}: Email '{email}' đã tồn tại trong hệ thống.")
                     continue
+                    
             position = str(row.get('Position', '')).strip()
             position = position if position != 'None' and position else None
 
@@ -181,8 +214,8 @@ def import_employees_from_excel(db: Session, file: UploadFile):
                 phone=phone,
                 position=position,
                 department_id=department_id,
+                group_id=group_id, # [MỚI] Bổ sung group_id
                 note=note
-                # Bỏ qua CCCD và Birthday vì Database model của bạn chưa có 2 cột này
             )
             
             db.add(new_emp)
@@ -191,7 +224,6 @@ def import_employees_from_excel(db: Session, file: UploadFile):
         except Exception as e:
             error_rows.append(f"Dòng {excel_row_num}: Lỗi dữ liệu ({str(e)})")
 
-    # Commit toàn bộ (bao gồm cả nhân viên mới và phòng ban mới)
     db.commit()
     
     return {
@@ -200,36 +232,36 @@ def import_employees_from_excel(db: Session, file: UploadFile):
         "errors": error_rows
     }
 
+
 # =========================
 # EXCEL EXPORT (NHÂN VIÊN)
 # =========================
 def export_employees_to_excel(db: Session):
     employees = db.query(Employee).all()
 
-    # Tạo data map với các cột giống hệt mẫu file Import
     data = []
     for emp in employees:
-        # Lấy tên phòng ban từ relationship (nếu có)
         dept_name = emp.department.department_name if emp.department else "Chưa phân bổ"
+        # [MỚI] Lấy tên tổ
+        group_name = emp.group.group_name if emp.group else ""
         
         data.append({
             "Name": emp.full_name,
             "Email": emp.email if emp.email else "",
-            "CCCD": "", # Bỏ trống theo form mẫu
-            "Birthday": "", # Bỏ trống theo form mẫu
+            "CCCD": "", 
+            "Birthday": "", 
             "Phone Number": emp.phone if emp.phone else "",
             "Department": dept_name,
+            "Group": group_name, # [MỚI] Xuất cột Group
             "Position": emp.position if emp.position else "",
             "Note": emp.note if emp.note else ""
         })
 
     df = pd.DataFrame(data)
     
-    # Ghi ra bộ nhớ ảo
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Employees')
 
     output.seek(0)
     return output
-
