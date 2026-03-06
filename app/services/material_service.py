@@ -1,5 +1,5 @@
-from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import or_, desc # <-- Bổ sung desc để sắp xếp
 from fastapi import HTTPException
 from typing import Optional
 
@@ -9,7 +9,6 @@ from app.models.supplier import Supplier
 from app.schemas.material_schema import MaterialCreate, MaterialUpdate
 import pandas as pd
 from io import BytesIO
-from sqlalchemy.orm import joinedload
 
 # ============================
 # READ
@@ -45,10 +44,34 @@ def get_materials(
     if supplier_id is not None:
         query = query.filter(Material.supplier_id == supplier_id)
         
-    return query.offset(skip).limit(limit).all()
+    # [CẬP NHẬT]: Thêm order_by để đưa bản ghi mới nhất lên đầu
+    return query.order_by(desc(Material.material_id)).offset(skip).limit(limit).all()
 
-def count_materials(db: Session):
-    return db.query(Material).count()
+def count_materials(
+    db: Session,
+    search: Optional[str] = None,
+    type_id: Optional[int] = None,
+    supplier_id: Optional[int] = None
+):
+    query = db.query(Material)
+    
+    # [CẬP NHẬT]: Bổ sung logic lọc vào hàm đếm để trả về số lượng chính xác khi có bộ lọc
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            or_(
+                Material.material_code.ilike(search_term),
+                Material.material_name.ilike(search_term)
+            )
+        )
+        
+    if type_id is not None:
+        query = query.filter(Material.type_id == type_id)
+        
+    if supplier_id is not None:
+        query = query.filter(Material.supplier_id == supplier_id)
+        
+    return query.count()
 
 # ============================
 # CREATE
@@ -132,6 +155,8 @@ def export_materials_to_excel(db: Session, type_id: Optional[int] = None, suppli
     if supplier_id is not None:
         query = query.filter(Material.supplier_id == supplier_id)
         
+    # [TÙY CHỌN]: Bạn có thể thêm sắp xếp vào cả file Excel xuất ra nếu muốn
+    query = query.order_by(desc(Material.material_id))    
     materials = query.all()
 
     data = []

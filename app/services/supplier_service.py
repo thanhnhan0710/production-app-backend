@@ -44,6 +44,31 @@ def get_suppliers(
         
     return query.offset(skip).limit(limit).all()
 
+def count_suppliers(
+    db: Session, 
+    search: Optional[str] = None,
+    category_id: Optional[int] = None,
+    is_active: Optional[bool] = None
+):
+    query = db.query(Supplier)
+    
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            or_(
+                Supplier.supplier_name.ilike(search_term),
+                Supplier.short_name.ilike(search_term)
+            )
+        )
+        
+    if category_id is not None:
+        query = query.filter(Supplier.category_id == category_id)
+        
+    if is_active is not None:
+        query = query.filter(Supplier.is_active == is_active)
+        
+    return query.count()
+
 # ============================
 # CREATE
 # ============================

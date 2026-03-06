@@ -10,6 +10,14 @@ from app.services import supplier_category_service
 
 router = APIRouter()
 
+@router.get("/count", response_model=int)
+def get_category_count(
+    search: Optional[str] = None, 
+    db: Session = Depends(deps.get_db)
+):
+    """Lấy tổng số lượng Loại nhà cung cấp"""
+    return supplier_category_service.count_categories(db, search=search)
+
 @router.get("/", response_model=List[SupplierCategoryResponse])
 def read_categories(
     skip: int = 0, 

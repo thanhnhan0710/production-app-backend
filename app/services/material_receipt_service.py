@@ -6,11 +6,13 @@ from datetime import datetime
 
 # Models
 from app.models.material_receipt import MaterialReceipt, MaterialReceiptDetail
-from app.models.purchase_order import PurchaseOrderDetail, POStatus, PurchaseOrderHeader
+from app.models.po_detail import PurchaseOrderDetail
+from app.models.po_header import  PurchaseOrderHeader
 from app.models.batch import Batch, BatchQCStatus
 from app.models.inventory import InventoryStock
 
 # Schemas
+from app.models.po_status import POStatus
 from app.schemas.material_receipt_schema import (
     MaterialReceiptCreate, 
     MaterialReceiptUpdate, 

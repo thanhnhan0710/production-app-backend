@@ -16,7 +16,6 @@ from app.models.standard import Standard
 from app.models.dye_color import DyeColor
 from app.models.bom_header import BOMHeader
 from app.models.bom_detail import BOMDetail
-from app.models.purchase_order import PurchaseOrderHeader,PurchaseOrderDetail
 from app.models.import_declaration import ImportDeclaration,ImportDeclarationDetail
 from app.models.warehouse import Warehouse
 from app.models.material_receipt import MaterialReceipt,MaterialReceiptDetail
@@ -32,7 +31,10 @@ from app.models.area import Area
 from app.models.machine_product_history import MachineProductHistory
 from app.models.employee_group import EmployeeGroup
 from app.models.supplier_category import SupplierCategory
-
+from app.models.incoterm import Incoterm
+from app.models.po_status import POStatus
+from app.models.po_header import PurchaseOrderHeader
+from app.models.po_detail import PurchaseOrderDetail
 # Import thêm các model khác của bạn ở đây...
 
 # Dictionary ánh xạ: "tên_bảng" -> ModelClass
@@ -75,7 +77,10 @@ MODEL_MAPPING = {
     "machine_product_histories": MachineProductHistory,
     "employee_groups":EmployeeGroup,
     "supplier_categories":SupplierCategory,
-    
+    "incoterms":Incoterm,
+    "po_statuses":POStatus,
+
+
     # Thêm các bảng khác vào đây...
 }
 

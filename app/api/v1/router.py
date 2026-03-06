@@ -3,7 +3,8 @@ from app.api.v1.endpoints import (
     batches,
     departments,
     employees,
-    machine_statuses, 
+    machine_statuses,
+    po_headers, 
     suppliers,
     materials,
     machines,
@@ -22,7 +23,6 @@ from app.api.v1.endpoints import (
     upload,
     weaving_daily_productions,
     boms,
-    purchase_orders,
     import_declarations,
     warehouses,
     material_receipts,
@@ -39,6 +39,10 @@ from app.api.v1.endpoints import (
     employee_groups,
     supplier_categories,
     material_types,
+    incoterms,
+    po_statuses,
+    po_details
+
 )
 
 api_router = APIRouter()
@@ -64,7 +68,6 @@ api_router.include_router(upload.router, prefix="/upload", tags=["Upload"])
 api_router.include_router(weaving_daily_productions.router, prefix="/weaving-daily-productions", tags=["Weaving Daily Productions"])
 # Ví dụ trong app/api/v1/api.py
 api_router.include_router(boms.router, prefix="/boms", tags=["BOM"])
-api_router.include_router(purchase_orders.router, prefix="/purchase-orders", tags=["Purchase Orders"])
 api_router.include_router(import_declarations.router, prefix="/import-declarations", tags=["Import Declarations"])
 api_router.include_router(warehouses.router, prefix="/warehouses", tags=["Warehouses"])
 api_router.include_router(material_receipts.router, prefix="/material-receipts", tags=["Material Receipts"])
@@ -82,3 +85,7 @@ api_router.include_router(machine_assignments.router, prefix="/machine-assignmen
 api_router.include_router(employee_groups.router, prefix="/employee-groups", tags=["Employee Groups"])
 api_router.include_router(supplier_categories.router, prefix="/supplier-categories", tags=["Supplier Categories"])
 api_router.include_router(material_types.router, prefix="/material-types", tags=["Material Types"])
+api_router.include_router(incoterms.router, prefix="/incoterms", tags=["Incoterm"])
+api_router.include_router(po_statuses.router, prefix="/po-statuses", tags=["PO Status"])
+api_router.include_router(po_headers.router, prefix="/purchase-orders", tags=["Purchase Order"])
+api_router.include_router(po_details.router, prefix="/po-details", tags=["Purchase Order Detail"])

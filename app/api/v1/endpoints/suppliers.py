@@ -10,6 +10,18 @@ from app.services import supplier_service
 
 router = APIRouter()
 
+@router.get("/count", response_model=int)
+def get_supplier_count(
+    search: Optional[str] = None,
+    category_id: Optional[int] = None,
+    is_active: Optional[bool] = None,
+    db: Session = Depends(deps.get_db)
+):
+    """Lấy tổng số lượng Nhà cung cấp"""
+    return supplier_service.count_suppliers(
+        db, search=search, category_id=category_id, is_active=is_active
+    )
+
 @router.get("/", response_model=List[SupplierResponse])
 def read_suppliers(
     skip: int = 0, 

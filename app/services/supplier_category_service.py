@@ -25,6 +25,15 @@ def get_categories(db: Session, skip: int = 0, limit: int = 100, search: Optiona
         
     return query.offset(skip).limit(limit).all()
 
+def count_categories(db: Session, search: Optional[str] = None):
+    query = db.query(SupplierCategory)
+    
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(SupplierCategory.category_name.ilike(search_term))
+        
+    return query.count()
+
 # ============================
 # CREATE
 # ============================

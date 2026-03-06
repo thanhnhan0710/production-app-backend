@@ -8,7 +8,7 @@ from app.models.material import Material
 from app.models.batch import Batch
 # Import các model liên quan để join
 from app.models.material_receipt import MaterialReceiptDetail, MaterialReceipt
-from app.models.purchase_order import PurchaseOrderHeader
+from app.models.po_header import PurchaseOrderHeader
 from app.models.supplier import Supplier
 
 from app.schemas.inventory_schema import InventoryAdjustment

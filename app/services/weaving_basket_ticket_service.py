@@ -12,7 +12,7 @@ from app.models.batch import Batch
 from app.models.material_receipt import MaterialReceiptDetail, MaterialReceipt # Cần để join
 from app.schemas.weaving_basket_ticket_schema import WeavingTicketCreate, WeavingTicketUpdate
 from app.services import weaving_daily_production_service
-from app.models.purchase_order import PurchaseOrderHeader
+from app.models.po_header import PurchaseOrderHeader
 from app.models.supplier import Supplier
 
 logger = logging.getLogger(__name__)

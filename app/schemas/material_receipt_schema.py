@@ -5,7 +5,8 @@ from datetime import date, datetime
 # Import các schema lồng nhau
 from app.schemas.import_declaration_schema import ImportDeclarationResponse
 from app.schemas.material_schema import MaterialResponse
-from app.schemas.purchase_order_schema import POHeaderResponse
+# CODE MỚI ĐÃ SỬA
+from app.schemas.po_header_schema import PurchaseOrderHeaderResponse
 from app.schemas.warehouse_schema import WarehouseResponse
 
 # --- DETAIL SCHEMAS ---
@@ -92,7 +93,7 @@ class MaterialReceiptResponse(MaterialReceiptBase):
     
     warehouse: Optional[WarehouseResponse] = None
     # Nếu có schema PO/Declaration response thì uncomment
-    po_header: Optional[POHeaderResponse] = None 
+    po_header: Optional[PurchaseOrderHeaderResponse] = None 
     declaration: Optional[ImportDeclarationResponse] = None
 
     class Config:
