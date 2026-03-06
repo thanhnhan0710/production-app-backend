@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, Query, status, BackgroundTasks
+from fastapi.responses import StreamingResponse # [MỚI]
 from sqlalchemy.orm import Session
 from typing import List, Optional
+import datetime
 
 from app.api import deps
 from app.core.websockets import ws_manager
@@ -16,6 +18,24 @@ router = APIRouter()
 @router.get("/next-number", response_model=str)
 def get_next_po_number(db: Session = Depends(deps.get_db)):
     return po_header_service.get_next_po_number(db)
+
+# --- [MỚI]: API TẢI FILE EXCEL THEO DÕI ---
+@router.get("/export", response_class=StreamingResponse)
+def export_purchase_orders(
+    vendor_id: Optional[int] = Query(None, description="Lọc theo ID nhà cung cấp"),
+    status_id: Optional[int] = Query(None, description="Lọc theo Trạng thái"),
+    search: Optional[str] = Query(None, description="Tìm theo số PO"),
+    db: Session = Depends(deps.get_db)
+):
+    """Xuất file Excel chứa chi tiết lịch trình giao hàng"""
+    excel_stream = po_header_service.export_excel_purchase_orders(db=db, vendor_id=vendor_id, status_id=status_id, search=search)
+    
+    filename = f"TheoDoiPO_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    return StreamingResponse(
+        excel_stream,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 @router.get("/count", response_model=int)
 def get_purchase_orders_count(

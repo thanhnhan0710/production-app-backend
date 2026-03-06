@@ -38,7 +38,7 @@ def update_po_detail(
     background_tasks: BackgroundTasks,
     db: Session = Depends(deps.get_db)
 ):
-    """Cập nhật số lượng, đơn giá, loại tiền tệ của 1 dòng mặt hàng"""
+    """Cập nhật thông tin (Số lượng, Đơn giá, Lịch trình giao hàng...) của 1 dòng mặt hàng"""
     updated_detail = po_detail_service.update_po_detail(db=db, detail_id=detail_id, detail_in=detail_in)
     background_tasks.add_task(ws_manager.broadcast, "REFRESH_PURCHASE_ORDERS")
     return updated_detail

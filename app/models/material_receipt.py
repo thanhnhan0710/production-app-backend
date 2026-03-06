@@ -14,7 +14,7 @@ class MaterialReceipt(Base):
     receipt_date = Column(Date, default=func.now())
     
     # Liên kết 3 bên
-    po_header_id = Column(Integer, ForeignKey("purchase_orders.po_id"), nullable=True)
+    po_header_id = Column(Integer, ForeignKey("purchase_order_headers.po_id"), nullable=True)
     declaration_id = Column(Integer, ForeignKey("import_declarations.id"), nullable=True)
     warehouse_id = Column(Integer, ForeignKey("warehouses.warehouse_id"), nullable=False)
     

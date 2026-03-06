@@ -11,21 +11,20 @@ def get_po_detail_by_id(db: Session, detail_id: int):
     return detail
 
 def create_po_detail(db: Session, po_id: int, detail_in: PurchaseOrderDetailCreate):
-    # 1. Kiểm tra xem Đơn hàng cha có tồn tại không
     db_header = db.query(PurchaseOrderHeader).filter(PurchaseOrderHeader.po_id == po_id).first()
     if not db_header:
         raise HTTPException(status_code=404, detail="Không tìm thấy Đơn mua hàng cha.")
 
-    # 2. Tính toán thành tiền
     if detail_in.is_pricing_by_roll:
         line_total = detail_in.quantity_rolls * detail_in.unit_price
     else:
         line_total = detail_in.quantity_kg * detail_in.unit_price
 
-    # 3. Tạo record Detail mới (nhét po_id vào)
+    # Lọc bỏ exchange_rate
+    dump_data = detail_in.model_dump(exclude={"exchange_rate"}, exclude_unset=True)
     db_detail = PurchaseOrderDetail(
         po_id=po_id,
-        **detail_in.model_dump(),
+        **dump_data,
         line_total=line_total
     )
     
@@ -33,16 +32,14 @@ def create_po_detail(db: Session, po_id: int, detail_in: PurchaseOrderDetailCrea
     db.commit()
     db.refresh(db_detail)
     
-    # 4. Tính lại tổng tiền của Đơn hàng cha
     _recalculate_header_total(db, po_id)
-    
     return db_detail
 
 def update_po_detail(db: Session, detail_id: int, detail_in: PurchaseOrderDetailUpdate):
     db_detail = get_po_detail_by_id(db, detail_id)
     po_id = db_detail.po_id
     
-    update_data = detail_in.model_dump(exclude_unset=True)
+    update_data = detail_in.model_dump(exclude={"exchange_rate"}, exclude_unset=True)
     for field, value in update_data.items():
         setattr(db_detail, field, value)
         
@@ -56,18 +53,16 @@ def update_po_detail(db: Session, detail_id: int, detail_in: PurchaseOrderDetail
     db.commit()
     db.refresh(db_detail)
     
-    # Tính lại tổng tiền cho Header
     _recalculate_header_total(db, po_id)
     return db_detail
 
 def delete_po_detail(db: Session, detail_id: int):
     db_detail = get_po_detail_by_id(db, detail_id)
-    po_id = db_detail.po_id # Giữ lại ID Header trước khi xóa
+    po_id = db_detail.po_id
     
     db.delete(db_detail)
     db.commit()
     
-    # Rất quan trọng: Phải tính lại tổng tiền cho Header vì vừa xóa đi 1 dòng tiền
     _recalculate_header_total(db, po_id)
     return {"message": "Đã xóa chi tiết đơn hàng thành công."}
 
@@ -76,9 +71,8 @@ def _recalculate_header_total(db: Session, po_id: int):
     if not db_header:
         return
         
-    total_vnd = 0.0
-    for detail in db_header.details:
-        total_vnd += (detail.line_total * detail.exchange_rate)
+    # Tính tổng tiền (Thuần USD, bỏ exchange_rate)
+    total_usd = sum(detail.line_total for detail in db_header.details)
         
-    db_header.total_amount = total_vnd
+    db_header.total_amount = total_usd
     db.commit()
