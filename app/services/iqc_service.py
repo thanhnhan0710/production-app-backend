@@ -5,7 +5,7 @@ from typing import List, Optional
 
 # Import Models
 from app.models.iqc_result import IQCResult, IQCResultStatus
-from app.models.batch import Batch, BatchQCStatus
+from app.models.material_batch import MaterialBatch
 
 # Import Schemas
 from app.schemas.iqc_result_schema import IQCResultCreate, IQCResultUpdate
@@ -31,7 +31,7 @@ class IQCService:
 
     def create(self, obj_in: IQCResultCreate) -> IQCResult:
         # 1. Kiểm tra Batch tồn tại
-        batch = self.db.query(Batch).filter(Batch.batch_id == obj_in.batch_id).first()
+        batch = self.db.query(MaterialBatch).filter(MaterialBatch.batch_id == obj_in.batch_id).first()
         if not batch:
             raise HTTPException(status_code=404, detail="Lô hàng không tồn tại.")
 
@@ -66,7 +66,7 @@ class IQCService:
         
         # 4. [QUAN TRỌNG] Đồng bộ lại trạng thái Batch nếu kết quả test thay đổi
         if obj_in.final_result:
-            batch = self.db.query(Batch).get(db_obj.batch_id)
+            batch = self.db.query(MaterialBatch).get(db_obj.batch_id)
             if batch:
                 self._sync_batch_status(batch, obj_in.final_result)
 
@@ -74,20 +74,4 @@ class IQCService:
         self.db.refresh(db_obj)
         return db_obj
 
-    def _sync_batch_status(self, batch: Batch, iqc_status: IQCResultStatus):
-        """
-        Hàm nội bộ: Ánh xạ trạng thái từ kết quả IQC sang trạng thái của Lô hàng (Batch Master).
-        - IQC Pass -> Batch Pass (Được phép xuất)
-        - IQC Fail -> Batch Fail (Khóa, chờ xử lý)
-        - IQC Pending -> Batch Pending
-        """
-        if iqc_status == IQCResultStatus.PASS:
-            batch.qc_status = BatchQCStatus.PASS
-            batch.qc_note = "IQC Passed: Auto updated by system"
-        elif iqc_status == IQCResultStatus.FAIL:
-            batch.qc_status = BatchQCStatus.FAIL
-            batch.qc_note = "IQC Failed: Auto updated by system"
-        else:
-            batch.qc_status = BatchQCStatus.PENDING
-        
-        self.db.add(batch)
+   

@@ -46,7 +46,7 @@ class MaterialExportDetail(Base):
     export_id = Column(Integer, ForeignKey("material_exports.id"), nullable=False)
     
     material_id = Column(Integer, ForeignKey("materials.material_id"), nullable=False)
-    batch_id = Column(Integer, ForeignKey("batches.batch_id"), nullable=False)
+    batch_id = Column(Integer, ForeignKey("material_batches.batch_id"), nullable=False)
     quantity = Column(Float, nullable=False)
     
     # [NEW] Loại thành phần sợi (Lấy từ BOMComponentType: GROUND, BINDER, FILLING...)
@@ -66,7 +66,7 @@ class MaterialExportDetail(Base):
     # Relationships
     header = relationship("MaterialExport", back_populates="details")
     material = relationship("Material")
-    batch = relationship("Batch")
+    batch = relationship("MaterialBatch") 
     machine = relationship("Machine")
     product = relationship("Product")
     basket = relationship("Basket")

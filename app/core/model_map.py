@@ -18,8 +18,6 @@ from app.models.bom_header import BOMHeader
 from app.models.bom_detail import BOMDetail
 from app.models.import_declaration import ImportDeclaration,ImportDeclarationDetail
 from app.models.warehouse import Warehouse
-from app.models.material_receipt import MaterialReceipt,MaterialReceiptDetail
-from app.models.batch import Batch
 from app.models.iqc_result import IQCResult
 from app.models.material_export import MaterialExport,MaterialExportDetail
 from app.models.machine_log import MachineLog
@@ -35,6 +33,10 @@ from app.models.incoterm import Incoterm
 from app.models.po_status import POStatus
 from app.models.po_header import PurchaseOrderHeader
 from app.models.po_detail import PurchaseOrderDetail
+from app.models.material_receipt import MaterialReceipt
+from app.models.material_receipt_detail import MaterialReceiptDetail
+from app.models.material_batch import MaterialBatch
+from app.models.material_inventory import MaterialInventory
 # Import thêm các model khác của bạn ở đây...
 
 # Dictionary ánh xạ: "tên_bảng" -> ModelClass
@@ -67,7 +69,7 @@ MODEL_MAPPING = {
     "warehouses":Warehouse,
     "material_receipts":MaterialReceipt,
     "material_receipt_details":MaterialReceiptDetail,
-    "batches":Batch,
+    "material_batches":MaterialBatch,
     "iqc_results":IQCResult,
     "material_exports":MaterialExport,
     "material_export_details":MaterialExportDetail,
@@ -79,6 +81,7 @@ MODEL_MAPPING = {
     "supplier_categories":SupplierCategory,
     "incoterms":Incoterm,
     "po_statuses":POStatus,
+    "material_inventories":MaterialInventory,
 
 
     # Thêm các bảng khác vào đây...

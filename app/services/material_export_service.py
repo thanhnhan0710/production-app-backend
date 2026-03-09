@@ -18,12 +18,12 @@ from app.schemas.material_export_schema import (
 )
 
 # Services
-from app.services.inventory_service import InventoryService
+from app.services.material_inventory_service import MaterialInventoryService
 
 class MaterialExportService:
     def __init__(self, db: Session):
         self.db = db
-        self.inventory_service = InventoryService(db)
+        self.inventory_service = MaterialInventoryService(db)
 
     # ... (Các hàm generate_code, get, get_multi giữ nguyên không đổi) ...
     

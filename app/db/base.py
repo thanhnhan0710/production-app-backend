@@ -22,10 +22,8 @@ from app.models.bom_header import BOMHeader  # noqa
 from app.models.bom_detail import BOMDetail
 from app.models.import_declaration import ImportDeclaration,ImportDeclarationDetail
 from app.models.warehouse import Warehouse
-from app.models.material_receipt import MaterialReceipt,MaterialReceiptDetail
-from app.models.batch import Batch     
-from app.models.iqc_result import IQCResult     
-from app.models.inventory import InventoryStock    
+
+from app.models.iqc_result import IQCResult        
 from app.models.material_export import MaterialExport,MaterialExportDetail
 from app.models.machine_log import MachineLog
 from app.models.weaving_production import WeavingProduction
@@ -41,3 +39,9 @@ from app.models.incoterm import Incoterm
 from app.models.po_status import POStatus
 from app.models.po_header import PurchaseOrderHeader
 from app.models.po_detail import PurchaseOrderDetail
+# Ví dụ trong file base.py
+from app.db.base_class import Base
+from app.models.material_receipt import MaterialReceipt
+from app.models.material_receipt_detail import MaterialReceiptDetail
+from app.models.material_batch import MaterialBatch
+from app.models.material_inventory import MaterialInventory

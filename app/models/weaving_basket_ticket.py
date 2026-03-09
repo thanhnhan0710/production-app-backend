@@ -21,7 +21,7 @@ class WeavingTicketYarn(Base):
     ticket_id = Column(Integer, ForeignKey("weaving_basket_tickets.id"), nullable=False)
     
     # Liên kết với Lô sợi (Batch)
-    batch_id = Column(Integer, ForeignKey("batches.batch_id"), nullable=False)
+    batch_id = Column(Integer, ForeignKey("material_batches.batch_id"), nullable=False)
     
     # Loại thành phần (Lấy từ Enum BOMComponentType: GROUND, FILLING, BINDER...)
     component_type = Column(String(50), nullable=False) 
@@ -33,7 +33,8 @@ class WeavingTicketYarn(Base):
     note = Column(String(255), nullable=True)
 
     # --- Relationships ---
-    batch = relationship("Batch")
+    batch = relationship("MaterialBatch") 
+# (Viết liền không có dấu gạch dưới)
     ticket = relationship("WeavingBasketTicket", back_populates="yarns")
 
 

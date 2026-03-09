@@ -1,8 +1,8 @@
-"""Khoi tao CSDL
+"""Khoi_tao_CSDL_moi
 
-Revision ID: 3f3456c7086b
+Revision ID: 98329fc670a5
 Revises: 
-Create Date: 2026-03-05 07:03:14.744203
+Create Date: 2026-03-07 01:57:30.593037
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '3f3456c7086b'
+revision: str = '98329fc670a5'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -71,6 +71,14 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_import_declarations_declaration_no'), 'import_declarations', ['declaration_no'], unique=True)
     op.create_index(op.f('ix_import_declarations_id'), 'import_declarations', ['id'], unique=False)
+    op.create_table('incoterms',
+    sa.Column('incoterm_id', sa.Integer(), nullable=False),
+    sa.Column('incoterm_code', sa.String(length=10), nullable=False),
+    sa.Column('description', sa.String(length=255), nullable=True),
+    sa.PrimaryKeyConstraint('incoterm_id')
+    )
+    op.create_index(op.f('ix_incoterms_incoterm_code'), 'incoterms', ['incoterm_code'], unique=True)
+    op.create_index(op.f('ix_incoterms_incoterm_id'), 'incoterms', ['incoterm_id'], unique=False)
     op.create_table('machine_statuses',
     sa.Column('status_id', sa.Integer(), nullable=False),
     sa.Column('status_name', sa.String(length=100), nullable=False),
@@ -96,6 +104,14 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_material_types_type_id'), 'material_types', ['type_id'], unique=False)
     op.create_index(op.f('ix_material_types_type_name'), 'material_types', ['type_name'], unique=True)
+    op.create_table('po_statuses',
+    sa.Column('status_id', sa.Integer(), nullable=False),
+    sa.Column('status_code', sa.String(length=50), nullable=False),
+    sa.Column('description', sa.String(length=255), nullable=True),
+    sa.PrimaryKeyConstraint('status_id')
+    )
+    op.create_index(op.f('ix_po_statuses_status_code'), 'po_statuses', ['status_code'], unique=True)
+    op.create_index(op.f('ix_po_statuses_status_id'), 'po_statuses', ['status_id'], unique=False)
     op.create_table('product_types',
     sa.Column('product_type_id', sa.Integer(), nullable=False),
     sa.Column('type_name', sa.String(length=100), nullable=False),
@@ -266,25 +282,24 @@ def upgrade() -> None:
     op.create_index(op.f('ix_materials_material_code'), 'materials', ['material_code'], unique=True)
     op.create_index(op.f('ix_materials_material_id'), 'materials', ['material_id'], unique=False)
     op.create_index(op.f('ix_materials_material_name'), 'materials', ['material_name'], unique=False)
-    op.create_table('purchase_orders',
-    sa.Column('po_id', sa.Integer(), nullable=False),
+    op.create_table('purchase_order_headers',
+    sa.Column('po_id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('po_number', sa.String(length=50), nullable=False),
     sa.Column('vendor_id', sa.Integer(), nullable=False),
-    sa.Column('order_date', sa.Date(), nullable=True),
-    sa.Column('expected_arrival_date', sa.Date(), nullable=True),
-    sa.Column('incoterm', sa.Enum('EXW', 'FOB', 'CIF', 'DDP', 'DAP', name='incotermtype'), nullable=True),
-    sa.Column('currency', sa.String(length=10), nullable=True),
-    sa.Column('exchange_rate', sa.Float(), nullable=True),
-    sa.Column('status', sa.Enum('DRAFT', 'SENT', 'CONFIRMED', 'PARTIAL', 'COMPLETED', 'CANCELLED', name='postatus'), nullable=True),
+    sa.Column('order_date', sa.DateTime(), nullable=True),
+    sa.Column('incoterm_id', sa.Integer(), nullable=True),
+    sa.Column('status_id', sa.Integer(), nullable=True),
+    sa.Column('note', sa.Text(), nullable=True),
     sa.Column('total_amount', sa.Float(), nullable=True),
-    sa.Column('note', sa.String(length=255), nullable=True),
-    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['incoterm_id'], ['incoterms.incoterm_id'], ),
+    sa.ForeignKeyConstraint(['status_id'], ['po_statuses.status_id'], ),
     sa.ForeignKeyConstraint(['vendor_id'], ['suppliers.supplier_id'], ),
     sa.PrimaryKeyConstraint('po_id')
     )
-    op.create_index(op.f('ix_purchase_orders_po_id'), 'purchase_orders', ['po_id'], unique=False)
-    op.create_index(op.f('ix_purchase_orders_po_number'), 'purchase_orders', ['po_number'], unique=True)
+    op.create_index(op.f('ix_purchase_order_headers_po_id'), 'purchase_order_headers', ['po_id'], unique=False)
+    op.create_index(op.f('ix_purchase_order_headers_po_number'), 'purchase_order_headers', ['po_number'], unique=True)
     op.create_table('standards',
     sa.Column('standard_id', sa.Integer(), nullable=False),
     sa.Column('product_id', sa.Integer(), nullable=False),
@@ -383,27 +398,35 @@ def upgrade() -> None:
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
     sa.ForeignKeyConstraint(['declaration_id'], ['import_declarations.id'], ),
-    sa.ForeignKeyConstraint(['po_header_id'], ['purchase_orders.po_id'], ),
+    sa.ForeignKeyConstraint(['po_header_id'], ['purchase_order_headers.po_id'], ),
     sa.ForeignKeyConstraint(['warehouse_id'], ['warehouses.warehouse_id'], ),
     sa.PrimaryKeyConstraint('receipt_id')
     )
     op.create_index(op.f('ix_material_receipts_receipt_id'), 'material_receipts', ['receipt_id'], unique=False)
     op.create_index(op.f('ix_material_receipts_receipt_number'), 'material_receipts', ['receipt_number'], unique=True)
     op.create_table('purchase_order_details',
-    sa.Column('detail_id', sa.Integer(), nullable=False),
+    sa.Column('detail_id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('po_id', sa.Integer(), nullable=False),
     sa.Column('material_id', sa.Integer(), nullable=False),
-    sa.Column('quantity', sa.Float(), nullable=False),
+    sa.Column('currency', sa.String(length=10), nullable=True),
+    sa.Column('quantity_kg', sa.Float(), nullable=False),
     sa.Column('quantity_rolls', sa.Integer(), nullable=True),
     sa.Column('unit_price', sa.Float(), nullable=False),
-    sa.Column('uom_id', sa.Integer(), nullable=True),
     sa.Column('line_total', sa.Float(), nullable=True),
     sa.Column('is_pricing_by_roll', sa.Boolean(), nullable=True),
+    sa.Column('ocean_freight', sa.Float(), nullable=True),
+    sa.Column('confirm_delivery', sa.String(length=50), nullable=True),
+    sa.Column('goods_readiness', sa.String(length=50), nullable=True),
+    sa.Column('shipping_line', sa.String(length=100), nullable=True),
+    sa.Column('forwarder', sa.String(length=100), nullable=True),
+    sa.Column('etd', sa.Date(), nullable=True),
+    sa.Column('eta', sa.Date(), nullable=True),
+    sa.Column('atd', sa.Date(), nullable=True),
+    sa.Column('booking_date', sa.Date(), nullable=True),
     sa.Column('received_quantity', sa.Float(), nullable=True),
     sa.Column('received_rolls', sa.Integer(), nullable=True),
     sa.ForeignKeyConstraint(['material_id'], ['materials.material_id'], ),
-    sa.ForeignKeyConstraint(['po_id'], ['purchase_orders.po_id'], ),
-    sa.ForeignKeyConstraint(['uom_id'], ['units.unit_id'], ),
+    sa.ForeignKeyConstraint(['po_id'], ['purchase_order_headers.po_id'], ),
     sa.PrimaryKeyConstraint('detail_id')
     )
     op.create_index(op.f('ix_purchase_order_details_detail_id'), 'purchase_order_details', ['detail_id'], unique=False)
@@ -748,9 +771,9 @@ def downgrade() -> None:
     op.drop_table('weaving_daily_productions')
     op.drop_index(op.f('ix_standards_standard_id'), table_name='standards')
     op.drop_table('standards')
-    op.drop_index(op.f('ix_purchase_orders_po_number'), table_name='purchase_orders')
-    op.drop_index(op.f('ix_purchase_orders_po_id'), table_name='purchase_orders')
-    op.drop_table('purchase_orders')
+    op.drop_index(op.f('ix_purchase_order_headers_po_number'), table_name='purchase_order_headers')
+    op.drop_index(op.f('ix_purchase_order_headers_po_id'), table_name='purchase_order_headers')
+    op.drop_table('purchase_order_headers')
     op.drop_index(op.f('ix_materials_material_name'), table_name='materials')
     op.drop_index(op.f('ix_materials_material_id'), table_name='materials')
     op.drop_index(op.f('ix_materials_material_code'), table_name='materials')
@@ -785,6 +808,9 @@ def downgrade() -> None:
     op.drop_table('shifts')
     op.drop_index(op.f('ix_product_types_product_type_id'), table_name='product_types')
     op.drop_table('product_types')
+    op.drop_index(op.f('ix_po_statuses_status_id'), table_name='po_statuses')
+    op.drop_index(op.f('ix_po_statuses_status_code'), table_name='po_statuses')
+    op.drop_table('po_statuses')
     op.drop_index(op.f('ix_material_types_type_name'), table_name='material_types')
     op.drop_index(op.f('ix_material_types_type_id'), table_name='material_types')
     op.drop_table('material_types')
@@ -792,6 +818,9 @@ def downgrade() -> None:
     op.drop_table('machine_types')
     op.drop_index(op.f('ix_machine_statuses_status_id'), table_name='machine_statuses')
     op.drop_table('machine_statuses')
+    op.drop_index(op.f('ix_incoterms_incoterm_id'), table_name='incoterms')
+    op.drop_index(op.f('ix_incoterms_incoterm_code'), table_name='incoterms')
+    op.drop_table('incoterms')
     op.drop_index(op.f('ix_import_declarations_id'), table_name='import_declarations')
     op.drop_index(op.f('ix_import_declarations_declaration_no'), table_name='import_declarations')
     op.drop_table('import_declarations')

@@ -1,9 +1,10 @@
 from fastapi import APIRouter
 from app.api.v1.endpoints import (
-    batches,
     departments,
     employees,
     machine_statuses,
+    material_batches,
+    material_inventorys,
     po_headers, 
     suppliers,
     materials,
@@ -27,7 +28,6 @@ from app.api.v1.endpoints import (
     warehouses,
     material_receipts,
     iqc_results,
-    inventorys,
     material_exports,
     weaving_productions,
     logs,
@@ -71,9 +71,9 @@ api_router.include_router(boms.router, prefix="/boms", tags=["BOM"])
 api_router.include_router(import_declarations.router, prefix="/import-declarations", tags=["Import Declarations"])
 api_router.include_router(warehouses.router, prefix="/warehouses", tags=["Warehouses"])
 api_router.include_router(material_receipts.router, prefix="/material-receipts", tags=["Material Receipts"])
-api_router.include_router(batches.router, prefix="/batches", tags=["Batches"])
+api_router.include_router(material_batches.router, prefix="/batches", tags=["Batches"])
 api_router.include_router(iqc_results.router, prefix="/iqc-results", tags=["Iqc Results"])
-api_router.include_router(inventorys.router, prefix="/inventorys", tags=["Inventorys"])
+api_router.include_router(material_inventorys.router, prefix="/inventories", tags=["Inventories"])
 api_router.include_router(material_exports.router, prefix="/material-exports", tags=["Material Exports"])
 api_router.include_router(weaving_productions.router, prefix="/weaving-productions", tags=["Weaving Productions"])
 api_router.include_router(logs.router, prefix="/logs", tags=["logs"])

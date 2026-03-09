@@ -16,7 +16,7 @@ class IQCResult(Base):
     test_id = Column(Integer, primary_key=True, index=True)
     
     # Liên kết lô hàng cần test
-    batch_id = Column(Integer, ForeignKey("batches.batch_id"), nullable=False)
+    batch_id = Column(Integer, ForeignKey("material_batches.batch_id"), nullable=False)
     
     test_date = Column(DateTime, default=func.now())
     tester_name = Column(String(100), nullable=True) # Người kiểm tra
@@ -35,4 +35,4 @@ class IQCResult(Base):
     updated_at = Column(DateTime, onupdate=func.now())
 
     # Relationships
-    batch = relationship("Batch")
+    batch = relationship("MaterialBatch") 

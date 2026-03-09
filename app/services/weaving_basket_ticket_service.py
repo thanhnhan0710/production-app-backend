@@ -6,10 +6,12 @@ from typing import Optional
 from datetime import datetime
 
 # Import Models & Schemas
+from app.models.material_receipt_detail import MaterialReceiptDetail
 from app.models.weaving_basket_ticket import WeavingBasketTicket, WeavingTicketYarn
 from app.models.basket import Basket
-from app.models.batch import Batch
-from app.models.material_receipt import MaterialReceiptDetail, MaterialReceipt # Cần để join
+from app.models.material_batch import MaterialBatch
+from app.models.material_receipt import  MaterialReceipt # Cần để join
+
 from app.schemas.weaving_basket_ticket_schema import WeavingTicketCreate, WeavingTicketUpdate
 from app.services import weaving_daily_production_service
 from app.models.po_header import PurchaseOrderHeader
@@ -27,10 +29,10 @@ def _get_base_query(db: Session):
         # CHUỖI JOIN ĐÚNG:
         joinedload(WeavingBasketTicket.yarns)
             .joinedload(WeavingTicketYarn.batch)
-            .joinedload(Batch.receipt_detail)
+            .joinedload(MaterialBatch.receipt_detail)
             .joinedload(MaterialReceiptDetail.header) # -> MaterialReceipt
             .joinedload(MaterialReceipt.po_header)    # -> PurchaseOrderHeader
-            .joinedload(PurchaseOrderHeader.vendor)   # -> Supplier (SỬA TẠI ĐÂY)
+  # -> Supplier (SỬA TẠI ĐÂY)
     )
 
 # ============================
