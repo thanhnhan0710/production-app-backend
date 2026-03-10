@@ -14,15 +14,18 @@ class MachineProductHistory(Base):
     # Liên kết với Sản phẩm
     product_id = Column(Integer, ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False)
     
+    # [MỚI]: Phân biệt line nào đang chạy mã này
+    line_number = Column(Integer, nullable=False, default=1, comment="Số thứ tự Line (1, 2, 3...)")
+    
     # Thời gian bắt đầu chạy
     start_time = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     
     # Thời gian kết thúc (Nếu NULL nghĩa là đang chạy hiện tại)
     end_time = Column(DateTime(timezone=True), nullable=True)
     
-    # Ghi chú thêm (Ví dụ: Chạy thử, Chạy đơn hàng VIP...)
+    # Ghi chú thêm
     notes = Column(String(255), nullable=True)
 
     # Relationships
     machine = relationship("Machine", backref="product_histories")
-    product = relationship("Product") # Giả định bạn đã có class Product
+    product = relationship("Product")

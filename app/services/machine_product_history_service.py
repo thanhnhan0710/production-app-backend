@@ -14,8 +14,10 @@ def assign_product_to_machine(db: Session, machine_id: int, data: MachineProduct
     if machine.polymorphic_type != "weaving_machine":
         raise ValueError("Chỉ có thể gán sản phẩm dệt cho Máy Dệt")
 
+    # [ĐÃ SỬA]: Kiểm tra tồn tại theo machine_id VÀ line_number
     current_running = db.query(MachineProductHistory).filter(
         MachineProductHistory.machine_id == machine_id,
+        MachineProductHistory.line_number == data.line_number,
         MachineProductHistory.end_time == None
     ).first()
 
@@ -29,6 +31,7 @@ def assign_product_to_machine(db: Session, machine_id: int, data: MachineProduct
     new_assignment = MachineProductHistory(
         machine_id=machine_id,
         product_id=data.product_id,
+        line_number=data.line_number, # [MỚI]
         notes=data.notes
     )
     db.add(new_assignment)
@@ -37,9 +40,11 @@ def assign_product_to_machine(db: Session, machine_id: int, data: MachineProduct
     
     return db.query(MachineProductHistory).options(joinedload(MachineProductHistory.product)).filter(MachineProductHistory.id == new_assignment.id).first()
 
-def stop_machine_production(db: Session, machine_id: int):
+def stop_machine_production(db: Session, machine_id: int, line_number: int):
+    # [ĐÃ SỬA]: Dừng theo line_number
     current_running = db.query(MachineProductHistory).filter(
         MachineProductHistory.machine_id == machine_id,
+        MachineProductHistory.line_number == line_number,
         MachineProductHistory.end_time == None
     ).first()
 
@@ -49,14 +54,14 @@ def stop_machine_production(db: Session, machine_id: int):
         db.refresh(current_running)
         return current_running
     return None
-
 def get_current_product_of_machine(db: Session, machine_id: int):
+    # [ĐÃ SỬA QUAN TRỌNG]: Trả về DẠNG LIST (.all()) thay vì .first() vì 1 máy có nhiều line đang chạy
     return db.query(MachineProductHistory)\
              .options(joinedload(MachineProductHistory.product))\
              .filter(
                  MachineProductHistory.machine_id == machine_id,
                  MachineProductHistory.end_time == None
-             ).first()
+             ).all()
 
 def get_machine_history(db: Session, machine_id: int, skip: int = 0, limit: int = 50):
     return db.query(MachineProductHistory)\

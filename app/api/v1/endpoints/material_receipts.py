@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
-
+from datetime import datetime
 from app.api import deps
 from app.core.websockets import ws_manager
 
@@ -15,6 +16,36 @@ def get_receipt_count(db: Session = Depends(deps.get_db)):
     """Lấy tổng số lượng Phiếu nhập kho"""
     return material_receipt_service.count_receipts(db)
 
+
+# ==========================================
+# [MỚI] API XUẤT EXCEL
+# ==========================================
+@router.get("/export-excel")
+def export_receipts_to_excel(
+    search: Optional[str] = None,
+    status: Optional[str] = None,
+    warehouse_id: Optional[int] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    db: Session = Depends(deps.get_db)
+):
+    """Xuất danh sách Phiếu nhập kho ra file Excel (.xlsx)"""
+    file_stream = material_receipt_service.export_excel(
+        db, search=search, status=status, warehouse_id=warehouse_id, 
+        start_date=start_date, end_date=end_date
+    )
+    
+    # Định dạng timestamp để nối vào tên file
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    file_name = f"PhieuNhapKho_{timestamp}.xlsx"
+    
+    return StreamingResponse(
+        file_stream, 
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={file_name}"}
+    )
+
+# [CẬP NHẬT]: Thêm tham số Query cho datetime
 @router.get("/", response_model=List[MaterialReceiptResponse])
 def read_receipts(
     skip: int = 0, 
@@ -22,11 +53,14 @@ def read_receipts(
     search: Optional[str] = None,
     status: Optional[str] = None,
     warehouse_id: Optional[int] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
     db: Session = Depends(deps.get_db)
 ):
-    """Lấy danh sách Phiếu nhập kho (Hỗ trợ lọc theo trạng thái, kho)"""
+    """Lấy danh sách Phiếu nhập kho (Mới nhất lên trước, Hỗ trợ lọc theo ngày)"""
     return material_receipt_service.get_receipts(
-        db, skip=skip, limit=limit, search=search, status=status, warehouse_id=warehouse_id
+        db, skip=skip, limit=limit, search=search, status=status, 
+        warehouse_id=warehouse_id, start_date=start_date, end_date=end_date
     )
 
 @router.get("/{receipt_id}", response_model=MaterialReceiptResponse)

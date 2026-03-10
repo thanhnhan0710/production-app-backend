@@ -16,6 +16,9 @@ class MaterialInventory(Base):
     # Vị trí cụ thể trong kho (VD: A1-01, B2-05)
     location = Column(String(50), nullable=True, default="N/A", comment="Vị trí kho chi tiết")
 
+    # [MỚI]: Thêm số Pallet để đồng bộ với Frontend
+    number_of_pallets = Column(Integer, default=0, comment="Số lượng Pallet/Kiện hàng")
+
     # Số lượng tồn kho khả dụng thực tế
     quantity_kg = Column(Float, default=0.0, nullable=False, comment="Số lượng Kg khả dụng")
     quantity_cones = Column(Integer, default=0, nullable=False, comment="Số lượng cuộn khả dụng")

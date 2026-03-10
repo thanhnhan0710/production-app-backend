@@ -8,6 +8,9 @@ class MaterialInventoryBase(BaseModel):
     batch_id: int
     location: Optional[str] = "N/A"
     
+    # [CẬP NHẬT]
+    number_of_pallets: Optional[int] = Field(0, ge=0)
+    
     quantity_kg: float = Field(0.0, ge=0)
     quantity_cones: int = Field(0, ge=0)
     
@@ -19,6 +22,7 @@ class MaterialInventoryCreate(MaterialInventoryBase):
 
 class MaterialInventoryUpdate(BaseModel):
     location: Optional[str] = None
+    number_of_pallets: Optional[int] = Field(None, ge=0) # [CẬP NHẬT]
     quantity_kg: Optional[float] = Field(None, ge=0)
     quantity_cones: Optional[int] = Field(None, ge=0)
     reserved_quantity_kg: Optional[float] = Field(None, ge=0)
@@ -31,10 +35,20 @@ class MaterialInventoryResponse(MaterialInventoryBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
     
-    # Ở Frontend, ta thường cần kèm tên kho, tên vật tư, mã lô để dễ hiển thị trên Table
-    # (FastAPI sẽ tự động mapping nếu trong response DB query có join các bảng này)
+    # Thông tin mở rộng (Frontend dùng để hiển thị)
     warehouse_name: Optional[str] = None
     material_code: Optional[str] = None
     batch_code: Optional[str] = None
+    po_number: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)
+
+class InventoryInitStock(BaseModel):
+    """Schema dành riêng cho việc Khởi tạo tồn kho thủ công (Đầu kỳ)"""
+    warehouse_id: int
+    material_id: int
+    supplier_batch_no: Optional[str] = None
+    location: Optional[str] = "N/A"
+    number_of_pallets: int = Field(0, ge=0)
+    quantity_kg: float = Field(..., gt=0)
+    quantity_cones: int = Field(..., ge=0)
