@@ -6,7 +6,6 @@ from typing import Optional, List
 
 from app.models.standard import Standard
 from app.models.product import Product
-from app.models.dye_color import DyeColor
 from app.schemas.standard_schema import StandardCreate, StandardUpdate
 
 # ============================
@@ -16,7 +15,7 @@ from app.schemas.standard_schema import StandardCreate, StandardUpdate
 def get_standard_by_id(db: Session, standard_id: int):
     return (
         db.query(Standard)
-        .options(joinedload(Standard.product), joinedload(Standard.dye_color)) # Load quan hệ
+        .options(joinedload(Standard.product))
         .filter(Standard.standard_id == standard_id)
         .first()
     )
@@ -24,7 +23,7 @@ def get_standard_by_id(db: Session, standard_id: int):
 def get_standards(db: Session, skip: int = 0, limit: int = 100):
     return (
         db.query(Standard)
-        .options(joinedload(Standard.product), joinedload(Standard.dye_color)) # Load quan hệ
+        .options(joinedload(Standard.product))
         .order_by(desc(Standard.standard_id))
         .offset(skip)
         .limit(limit)
@@ -39,30 +38,24 @@ def search_standards(
     db: Session,
     keyword: Optional[str] = None, 
     product_id: Optional[int] = None,
-    dye_color_id: Optional[int] = None,
     skip: int = 0,
     limit: int = 100
 ):
-    query = db.query(Standard).options(joinedload(Standard.product), joinedload(Standard.dye_color))
+    query = db.query(Standard).options(joinedload(Standard.product))
 
     if keyword:
         search_term = f"%{keyword}%"
-        # Tìm trong Note, Appearance hoặc Mã sản phẩm, Tên màu
-        query = query.join(Product, isouter=True).join(DyeColor, isouter=True).filter(
+        # Tìm trong Note, Curved hoặc Mã sản phẩm
+        query = query.join(Product, isouter=True).filter(
             or_(
                 Standard.note.ilike(search_term),
-                Standard.appearance.ilike(search_term),
-                # [FIX] Sửa Product.name -> Product.item_code
-                Product.item_code.ilike(search_term), 
-                DyeColor.color_name.ilike(search_term) 
+                Standard.curved.ilike(search_term),
+                Product.item_code.ilike(search_term) 
             )
         )
     
     if product_id:
         query = query.filter(Standard.product_id == product_id)
-        
-    if dye_color_id:
-        query = query.filter(Standard.dye_color_id == dye_color_id)
 
     return query.order_by(desc(Standard.standard_id)).offset(skip).limit(limit).all()
 
@@ -141,8 +134,6 @@ def import_standard_from_excel(db: Session, file: UploadFile):
         if pd.isnull(val) or val is None or str(val).strip() in ['', 'nan', 'None']: return ""
         return str(val).strip()
 
-    # Create a set to track product IDs processed in THIS file 
-    # to prevent duplicates if the Excel has the same item twice
     processed_product_ids = set()
 
     for index, row in df.iterrows():
@@ -169,7 +160,6 @@ def import_standard_from_excel(db: Session, file: UploadFile):
             error_rows.append(f"Dòng {excel_row}: Sản phẩm '{item_code}' đã có Standard trong hệ thống.")
             continue
 
-        color_id = None 
         width = safe_str(row.get('Chiều rộng (mm)'))
         thick = safe_str(row.get('Độ dày (mm)'))
         strength = safe_str(row.get('Lực căng đứt (≥daN)'))
@@ -177,26 +167,21 @@ def import_standard_from_excel(db: Session, file: UploadFile):
         density = safe_str(row.get('Mật độ sợi ngang'))
         weight = safe_str(row.get('Trọng lượng (±10%,g/m)'))
         note = safe_str(row.get('Ghi chú'))
-        appearance = safe_str(row.get('Cong')) 
+        curved = safe_str(row.get('Cong')) 
 
         try:
             new_std = Standard(
                 product_id=product.product_id,
-                dye_color_id=color_id,
                 width_mm=width if width else "0",
                 thickness_mm=thick if thick else "0",
                 breaking_strength_dan=strength if strength else "0",
                 elongation_at_load_percent=elongation if elongation else "0",
                 weft_density=density if density else "0",
                 weight_gm=weight if weight else "0",
-                appearance=appearance,
-                note=note,
-                color_fastness_dry=None,
-                color_fastness_wet=None,
-                delta_e=None
+                curved=curved,
+                note=note
             )
             db.add(new_std)
-            # Mark this product_id as processed to catch duplicates in the file
             processed_product_ids.add(product.product_id) 
             success_count += 1
             

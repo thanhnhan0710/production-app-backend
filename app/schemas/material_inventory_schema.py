@@ -2,13 +2,33 @@ from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 from datetime import datetime
 
+# =======================
+# CÁC SCHEMA LỒNG NHAU (NESTED)
+# Bổ sung để Pydantic tự động bóc tách dữ liệu từ hàm joinedload()
+# =======================
+class SimpleMaterial(BaseModel):
+    material_code: str
+    material_name: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
+
+class SimpleBatch(BaseModel):
+    batch_code: str
+    model_config = ConfigDict(from_attributes=True)
+
+class SimpleWarehouse(BaseModel):
+    warehouse_name: Optional[str] = None
+    name: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
+
+# =======================
+# SCHEMA CHÍNH
+# =======================
 class MaterialInventoryBase(BaseModel):
     warehouse_id: int
     material_id: int
     batch_id: int
     location: Optional[str] = "N/A"
     
-    # [CẬP NHẬT]
     number_of_pallets: Optional[int] = Field(0, ge=0)
     
     quantity_kg: float = Field(0.0, ge=0)
@@ -22,7 +42,7 @@ class MaterialInventoryCreate(MaterialInventoryBase):
 
 class MaterialInventoryUpdate(BaseModel):
     location: Optional[str] = None
-    number_of_pallets: Optional[int] = Field(None, ge=0) # [CẬP NHẬT]
+    number_of_pallets: Optional[int] = Field(None, ge=0)
     quantity_kg: Optional[float] = Field(None, ge=0)
     quantity_cones: Optional[int] = Field(None, ge=0)
     reserved_quantity_kg: Optional[float] = Field(None, ge=0)
@@ -35,11 +55,16 @@ class MaterialInventoryResponse(MaterialInventoryBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
     
-    # Thông tin mở rộng (Frontend dùng để hiển thị)
+    # [GIỮ NGUYÊN] Các trường gán động cũ (để không phá vỡ logic cũ nếu có)
     warehouse_name: Optional[str] = None
     material_code: Optional[str] = None
     batch_code: Optional[str] = None
     po_number: Optional[str] = None
+    
+    # [MỚI]: Trả về các Object lồng nhau để Frontend dễ dàng lấy mã
+    material: Optional[SimpleMaterial] = None
+    batch: Optional[SimpleBatch] = None
+    warehouse: Optional[SimpleWarehouse] = None
     
     model_config = ConfigDict(from_attributes=True)
 

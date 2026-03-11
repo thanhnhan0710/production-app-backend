@@ -3,7 +3,9 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.base_class import Base
 
-# Bảng Header: Phiếu xuất kho (Giữ nguyên)
+# ==========================================
+# BẢNG HEADER: Phiếu xuất kho
+# ==========================================
 class MaterialExport(Base):
     __tablename__ = "material_exports"
 
@@ -38,28 +40,31 @@ class MaterialExport(Base):
     
     details = relationship("MaterialExportDetail", back_populates="header", cascade="all, delete-orphan")
 
-# Bảng Detail: Chi tiết xuất (Cập nhật)
+
+# ==========================================
+# BẢNG DETAIL: Chi tiết xuất kho cho từng Loom
+# ==========================================
 class MaterialExportDetail(Base):
     __tablename__ = "material_export_details"
 
     detail_id = Column(Integer, primary_key=True, index=True)
-    export_id = Column(Integer, ForeignKey("material_exports.id"), nullable=False)
+    export_id = Column(Integer, ForeignKey("material_exports.id", ondelete="CASCADE"), nullable=False)
     
+    # Thông tin lô sợi xuất đi
     material_id = Column(Integer, ForeignKey("materials.material_id"), nullable=False)
     batch_id = Column(Integer, ForeignKey("material_batches.batch_id"), nullable=False)
-    quantity = Column(Float, nullable=False)
     
-    # [NEW] Loại thành phần sợi (Lấy từ BOMComponentType: GROUND, BINDER, FILLING...)
-    # Ví dụ: Batch A xuất 50kg làm sợi GROUND, Batch B xuất 10kg làm sợi BINDER
+    # [CẬP NHẬT] Số lượng xuất thực tế
+    quantity_kg = Column(Float, nullable=False, comment="Khối lượng xuất (Kg)")
+    quantity_cones = Column(Integer, default=0, comment="Số cuộn xuất")
+    number_of_pallets = Column(Integer, default=0, comment="Số pallet xuất")
+    
+    # Loại thành phần sợi (Ví dụ: GROUND, BINDER, FILLING...)
     component_type = Column(String(50), nullable=True) 
 
-    # Thông tin sản xuất (Đích đến)
-    machine_id = Column(Integer, ForeignKey("machines.machine_id"), nullable=True)
-    machine_line = Column(Integer, nullable=True)
-    
-    product_id = Column(Integer, ForeignKey("products.product_id"), nullable=True)
-    standard_id = Column(Integer, ForeignKey("standards.standard_id"), nullable=True)
-    basket_id = Column(Integer, ForeignKey("baskets.basket_id"), nullable=True)
+    # [CẬP NHẬT] Đích đến: Liên kết trực tiếp tới Loom đang chạy (MachineProductHistory)
+    # Từ ID này có thể truy ra được Machine, Line và Product đang chạy.
+    loom_id = Column(Integer, ForeignKey("machine_product_histories.id"), nullable=True, comment="ID của phiên chạy (Loom) nhận hàng")
     
     note = Column(String(200), nullable=True)
 
@@ -67,6 +72,6 @@ class MaterialExportDetail(Base):
     header = relationship("MaterialExport", back_populates="details")
     material = relationship("Material")
     batch = relationship("MaterialBatch") 
-    machine = relationship("Machine")
-    product = relationship("Product")
-    basket = relationship("Basket")
+    
+    # [MỚI] Quan hệ trỏ về bảng Lịch sử/Loom đang chạy
+    loom = relationship("MachineProductHistory")

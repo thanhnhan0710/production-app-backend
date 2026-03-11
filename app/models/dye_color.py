@@ -11,4 +11,3 @@ class DyeColor(Base):
     hex_code= Column(String(20), unique=True,nullable=True)
     note = Column(String(150), nullable=True)
 
-    standards = relationship("Standard", back_populates="dye_color")

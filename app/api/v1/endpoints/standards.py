@@ -35,20 +35,18 @@ def read_standards(
 def search_standards(
     keyword: Optional[str] = None,
     product_id: Optional[int] = None,
-    dye_color_id: Optional[int] = None,
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(deps.get_db)
 ):
     """
-    Search standards by Keyword (Note, Appearance, Product Item Code, Color Name) 
-    or Filters (Product ID, Dye Color ID).
+    Search standards by Keyword (Note, Curved, Product Item Code) 
+    or Filters (Product ID).
     """
     return standard_service.search_standards(
         db=db,
         keyword=keyword,
         product_id=product_id,
-        dye_color_id=dye_color_id,
         skip=skip,
         limit=limit
     )
@@ -105,6 +103,8 @@ def update_standard(
     Update standard info.
     """
     updated_standard = standard_service.update_standard(db, standard_id, standard_in)
+    if not updated_standard:
+        raise HTTPException(status_code=404, detail="Standard not found")
     
     # Bắn tín hiệu WebSocket
     background_tasks.add_task(ws_manager.broadcast, "REFRESH_STANDARDS")
@@ -124,8 +124,10 @@ def delete_standard(
     """
     Delete a standard.
     """
-    standard_service.delete_standard(db, standard_id)
-    
+    success = standard_service.delete_standard(db, standard_id)
+    if not success:
+         raise HTTPException(status_code=404, detail="Standard not found")
+         
     # Bắn tín hiệu WebSocket
     background_tasks.add_task(ws_manager.broadcast, "REFRESH_STANDARDS")
     
