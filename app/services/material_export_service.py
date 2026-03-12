@@ -235,3 +235,27 @@ class MaterialExportService:
         self.db.delete(db_obj)
         self.db.commit()
         return {"message": "Đã hủy phiếu xuất thành công và hoàn trả tồn kho."}
+    
+    def get_active_batches_on_machine(self, machine_id: int, product_id: int):
+        details = self.db.query(MaterialExportDetail).join(
+            MachineProductHistory, MaterialExportDetail.loom_id == MachineProductHistory.id
+        ).filter(
+            MachineProductHistory.machine_id == machine_id,
+            MachineProductHistory.product_id == product_id,
+            MachineProductHistory.end_time.is_(None)
+        ).all()
+
+        result = []
+        for d in details:
+            result.append({
+                # Bắn ra cả snake_case và camelCase để Flutter auto-map không bị trượt
+                "batch_id": d.batch_id,
+                "batchId": d.batch_id,
+                "component_type": d.component_type,
+                "yarn_role": d.component_type,
+                "yarnRole": d.component_type,
+                "quantity_kg": float(d.quantity_kg) if d.quantity_kg else 0.0,
+                "quantityKg": float(d.quantity_kg) if d.quantity_kg else 0.0,
+            })
+            
+        return result

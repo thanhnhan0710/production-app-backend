@@ -1,7 +1,7 @@
 import os
 import shutil
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, BackgroundTasks, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -52,21 +52,56 @@ def search_machines(
 ):
     return machine_service.search_machines(db=db, keyword=keyword, status_id=status_id, area_id=area_id, skip=skip, limit=limit)
 
+# =========================================================================
+# [ĐÃ SỬA]: Hỗ trợ nhận cả JSON (khi không có ảnh) và Form-Data (khi có ảnh)
+# Tránh lỗi 422 khi Flutter gửi PATCH bằng application/json
+# =========================================================================
+@router.patch("/{machine_id}/status", response_model=MachineResponse)
 @router.put("/{machine_id}/status", response_model=MachineResponse)
-def update_machine_status_endpoint(
-    machine_id: int, background_tasks: BackgroundTasks, status: str = Form(...), 
-    reason: Optional[str] = Form(None), image: Optional[UploadFile] = File(None), db: Session = Depends(deps.get_db)
+async def update_machine_status_endpoint(
+    machine_id: int, 
+    request: Request,
+    background_tasks: BackgroundTasks, 
+    db: Session = Depends(deps.get_db)
 ):
+    content_type = request.headers.get("content-type", "")
+    
+    status = None
+    reason = None
     image_url_path = None
-    if image:
-        try:
-            if not os.path.exists(MACHINE_LOG_DIR): os.makedirs(MACHINE_LOG_DIR)
-            file_extension = os.path.splitext(image.filename)[1]
-            unique_filename = f"{uuid.uuid4()}{file_extension}"
-            file_path = f"{MACHINE_LOG_DIR}/{unique_filename}"
-            with open(file_path, "wb") as buffer: shutil.copyfileobj(image.file, buffer)
-            image_url_path = f"/{file_path}"
-        except Exception as e: print(f"Lỗi lưu file: {e}")
+    
+    # Nếu App gửi lên là JSON (Thường xảy ra khi không đính kèm ảnh)
+    if "application/json" in content_type:
+        body = await request.json()
+        status = body.get("status")
+        reason = body.get("reason")
+    else:
+        # Nếu App gửi lên là FormData (Thường xảy ra khi có đính kèm ảnh)
+        form = await request.form()
+        status = form.get("status")
+        reason = form.get("reason")
+        image = form.get("image")
+        
+        # Xử lý lưu file ảnh nếu có
+        if image and hasattr(image, "filename") and image.filename:
+            try:
+                if not os.path.exists(MACHINE_LOG_DIR): os.makedirs(MACHINE_LOG_DIR)
+                file_extension = os.path.splitext(image.filename)[1]
+                unique_filename = f"{uuid.uuid4()}{file_extension}"
+                file_path = f"{MACHINE_LOG_DIR}/{unique_filename}"
+                
+                content = await image.read()
+                with open(file_path, "wb") as buffer: 
+                    buffer.write(content)
+                image_url_path = f"/{file_path}"
+            except Exception as e: print(f"Lỗi lưu file: {e}")
+
+    if not status:
+        raise HTTPException(status_code=422, detail="Trường 'status' là bắt buộc trong body hoặc form-data.")
+
+    # Đảm bảo status là chuỗi (string)
+    if isinstance(status, int):
+        status = str(status)
 
     updated_machine = machine_service.update_machine_status(db, machine_id, status, reason, image_url_path)
     if not updated_machine: raise HTTPException(status_code=404, detail="Machine not found")

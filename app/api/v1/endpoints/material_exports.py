@@ -145,6 +145,15 @@ def create_export(
     background_tasks.add_task(ws_manager.broadcast, "REFRESH_MATERIAL_INVENTORIES")
     return new_export
 
+@router.get("/active-batches-on-machine")
+def get_active_batches_on_machine(
+    machine_id: int,
+    product_id: int,
+    db: Session = Depends(deps.get_db)
+):
+    service = MaterialExportService(db)
+    return service.get_active_batches_on_machine(machine_id, product_id)
+
 @router.get("/{id}", response_model=MaterialExportResponse)
 def read_export_detail(id: int, db: Session = Depends(deps.get_db)):
     service = MaterialExportService(db)

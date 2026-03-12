@@ -34,7 +34,7 @@ class SupplierShort(BaseModel):
 # [MỚI] Schema Batch rút gọn (kèm Supplier)
 class BatchInYarn(BaseModel):
     batch_id: int
-    internal_batch_code: str
+    batch_code: str
     supplier_batch_no: Optional[str] = None
     # Nested Supplier để lấy tên viết tắt
     supplier: Optional[SupplierShort] = None 
