@@ -5,7 +5,6 @@ import pandas as pd
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
 
-# [CẬP NHẬT] Đổi MachineArea thành Area
 from app.models.machine import Machine, WeavingMachine, DyeingMachine
 from app.models.machine_type import MachineType
 from app.models.machine_status import MachineStatus
@@ -48,7 +47,6 @@ def search_machines(
     )
 
     if keyword:
-        # Tự động JOIN với Area để tìm kiếm theo tên Khu vực
         query = query.outerjoin(MachineType).outerjoin(Area).filter(
             or_(
                 Machine.machine_name.ilike(f"%{keyword}%"),
@@ -100,12 +98,16 @@ def delete_machine(db: Session, machine_id: int):
     db.commit()
     return True
 
+# ==============================================================================
+# [ĐÃ NÂNG CẤP]: Hàm cập nhật trạng thái nay đã hỗ trợ cập nhật THEO TỪNG LINE
+# ==============================================================================
 def update_machine_status(
-    db: Session, machine_id: int, status_name: str, reason: str = None, image_url: str = None
+    db: Session, machine_id: int, status_name: str, reason: str = None, image_url: str = None, lines: list[int] = None
 ):
     machine = db.get(Machine, machine_id)
     if not machine: return None
 
+    # Tìm ID của trạng thái
     status_record = db.query(MachineStatus).filter(MachineStatus.status_name.ilike(status_name)).first()
     if not status_record:
         status_record = MachineStatus(status_name=status_name)
@@ -113,30 +115,69 @@ def update_machine_status(
         db.flush()
 
     new_status_id = status_record.status_id
-    if machine.status_id == new_status_id: return machine
-
     current_time = datetime.now()
 
-    last_log = db.query(MachineLog).filter(
-        MachineLog.machine_id == machine_id, MachineLog.end_time == None
+    # NẾU CÓ CHỈ ĐỊNH RÕ LINE NÀO BỊ SỰ CỐ
+    if lines and len(lines) > 0:
+        for line_num in lines:
+            # 1. Đóng log cũ của chính Line này lại
+            last_line_log = db.query(MachineLog).filter(
+                MachineLog.machine_id == machine_id, 
+                MachineLog.line_number == line_num,
+                MachineLog.end_time.is_(None)
+            ).order_by(MachineLog.start_time.desc()).first()
+
+            if last_line_log: 
+                last_line_log.end_time = current_time
+
+            # 2. Tạo log mới riêng cho Line này
+            new_log = MachineLog(
+                machine_id=machine_id, line_number=line_num, status=status_name, 
+                start_time=current_time, end_time=None, reason=reason, image_url=image_url
+            )
+            db.add(new_log)
+            
+        db.commit()
+        return get_machine(db, machine_id) # Trả về máy (KHÔNG thay đổi trạng thái chung của cả máy)
+
+    # NẾU KHÔNG CHỈ ĐỊNH LINE (Đổi trạng thái toàn bộ máy)
+    last_machine_log = db.query(MachineLog).filter(
+        MachineLog.machine_id == machine_id, 
+        MachineLog.line_number.is_(None), # Log chung cả máy
+        MachineLog.end_time.is_(None)
     ).order_by(MachineLog.start_time.desc()).first()
 
-    if last_log: last_log.end_time = current_time
+    if last_machine_log: 
+        last_machine_log.end_time = current_time
 
-    new_log = MachineLog(
-        machine_id=machine_id, status=status_name, start_time=current_time,
-        end_time=None, reason=reason, image_url=image_url
+    new_machine_log = MachineLog(
+        machine_id=machine_id, line_number=None, status=status_name, 
+        start_time=current_time, end_time=None, reason=reason, image_url=image_url
     )
-    db.add(new_log)
+    db.add(new_machine_log)
 
+    # Cập nhật trạng thái chung
     machine.status_id = new_status_id
     db.commit()
     return get_machine(db, machine_id)
 
+
+# [MỚI]: Hàm quét Database để lấy trạng thái thật của tất cả các Line đang hoạt động
+def get_active_line_statuses(db: Session):
+    active_logs = db.query(MachineLog).filter(
+        MachineLog.line_number.isnot(None),
+        MachineLog.end_time.is_(None)
+    ).all()
+    
+    result = {}
+    for log in active_logs:
+        result[f"{log.machine_id}_{log.line_number}"] = log.status
+    return result
+
 def get_machine_history(db: Session, machine_id: int, limit: int = 20):
     return db.query(MachineLog).filter(MachineLog.machine_id == machine_id).order_by(MachineLog.start_time.desc()).limit(limit).all()
 
-# EXCEL IMPORT (THÔNG MINH - TỰ ĐỘNG TẠO MASTER DATA)
+# EXCEL IMPORT / EXPORT (Giữ nguyên)
 def import_machines_from_excel(db: Session, file: UploadFile):
     try:
         df = pd.read_excel(file.file, header=1)
@@ -148,7 +189,6 @@ def import_machines_from_excel(db: Session, file: UploadFile):
     success_count = 0
     error_rows = []
 
-    # Cache
     areas_map = {a.area_name.strip().lower(): a.area_id for a in db.query(Area).all()}
     status_map = {s.status_name.strip().lower(): s.status_id for s in db.query(MachineStatus).all()}
     existing_machines = {m.machine_name.strip().lower() for m in db.query(Machine.machine_name).all()}
@@ -167,7 +207,6 @@ def import_machines_from_excel(db: Session, file: UploadFile):
 
         excel_current_machines.add(machine_name_lower)
 
-        # Xử lý Khu vực bằng bảng Area
         area_str = str(row.get('AREA', '')).strip()
         area_id = None
         if area_str and area_str != 'None':
@@ -179,7 +218,6 @@ def import_machines_from_excel(db: Session, file: UploadFile):
                 areas_map[area_key] = new_area.area_id
             area_id = areas_map[area_key]
 
-        # Xử lý Trạng thái
         status_str = str(row.get('STATUS', 'STOPPED')).strip()
         status_id = None
         if status_str and status_str != 'None':

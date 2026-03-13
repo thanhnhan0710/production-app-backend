@@ -8,6 +8,9 @@ class MachineLog(Base):
     id = Column(Integer, primary_key=True, index=True)
     machine_id = Column(Integer, ForeignKey("machines.machine_id"), nullable=False)
     
+    # [THÊM MỚI]: Cột lưu vị trí Line bị sự cố (Null = Cả máy bị sự cố)
+    line_number = Column(Integer, nullable=True) 
+    
     status = Column(String(50), nullable=False) # RUNNING, STOPPED, MAINTENANCE...
     
     start_time = Column(DateTime, default=func.now(), nullable=False)

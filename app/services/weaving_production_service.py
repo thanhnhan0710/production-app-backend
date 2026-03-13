@@ -65,9 +65,10 @@ class WeavingProductionService:
             shift_id=obj_in.shift_id,
             total_weight=obj_in.total_weight,
             run_waste=obj_in.run_waste,
+            run_waste_reason=obj_in.run_waste_reason,
             setup_waste=obj_in.setup_waste,
+            weaving_ticket_id=obj_in.weaving_ticket_id,
             updated_by_id=obj_in.updated_by_id,
-            # weaving_ticket_id=obj_in.weaving_ticket_id # Bỏ comment nếu model có trường này
         )
         
         self.db.add(db_obj)

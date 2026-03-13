@@ -21,6 +21,13 @@ MACHINE_LOG_DIR = f"{BASE_STATIC_DIR}/machine_logs"
 def read_machines(skip: int = 0, limit: int = 100, db: Session = Depends(deps.get_db)):
     return machine_service.get_machines(db, skip=skip, limit=limit)
 
+# =============================================================================
+# [API MỚI]: Lấy danh sách trạng thái của toàn bộ các Line đang hoạt động
+# =============================================================================
+@router.get("/lines/active-statuses")
+def get_active_lines_statuses(db: Session = Depends(deps.get_db)):
+    return machine_service.get_active_line_statuses(db)
+
 @router.post("/", response_model=MachineResponse)
 def create_machine(machine: MachineCreate, background_tasks: BackgroundTasks, db: Session = Depends(deps.get_db)):
     new_machine = machine_service.create_machine(db, machine)
@@ -52,10 +59,6 @@ def search_machines(
 ):
     return machine_service.search_machines(db=db, keyword=keyword, status_id=status_id, area_id=area_id, skip=skip, limit=limit)
 
-# =========================================================================
-# [ĐÃ SỬA]: Hỗ trợ nhận cả JSON (khi không có ảnh) và Form-Data (khi có ảnh)
-# Tránh lỗi 422 khi Flutter gửi PATCH bằng application/json
-# =========================================================================
 @router.patch("/{machine_id}/status", response_model=MachineResponse)
 @router.put("/{machine_id}/status", response_model=MachineResponse)
 async def update_machine_status_endpoint(
@@ -68,6 +71,7 @@ async def update_machine_status_endpoint(
     
     status = None
     reason = None
+    raw_lines = None # Dùng một biến chung để nhận dữ liệu lines thô
     image_url_path = None
     
     # Nếu App gửi lên là JSON (Thường xảy ra khi không đính kèm ảnh)
@@ -75,11 +79,13 @@ async def update_machine_status_endpoint(
         body = await request.json()
         status = body.get("status")
         reason = body.get("reason")
+        raw_lines = body.get("lines") 
     else:
         # Nếu App gửi lên là FormData (Thường xảy ra khi có đính kèm ảnh)
         form = await request.form()
         status = form.get("status")
         reason = form.get("reason")
+        raw_lines = form.get("lines") 
         image = form.get("image")
         
         # Xử lý lưu file ảnh nếu có
@@ -103,7 +109,20 @@ async def update_machine_status_endpoint(
     if isinstance(status, int):
         status = str(status)
 
-    updated_machine = machine_service.update_machine_status(db, machine_id, status, reason, image_url_path)
+    # [ĐÃ SỬA]: Xử lý danh sách lines thông minh hơn
+    lines_list = []
+    if raw_lines is not None:
+        if isinstance(raw_lines, list):
+            # Nếu Flutter gửi JSON mảng [1, 2]
+            lines_list = [int(x) for x in raw_lines]
+        elif isinstance(raw_lines, str) and raw_lines.strip() != "":
+             # Nếu Flutter gửi FormData chuỗi "1,2"
+             try:
+                 lines_list = [int(x.strip()) for x in raw_lines.split(",") if x.strip()]
+             except ValueError:
+                 pass # Bỏ qua nếu có lỗi parse int
+
+    updated_machine = machine_service.update_machine_status(db, machine_id, status, reason, image_url_path, lines_list)
     if not updated_machine: raise HTTPException(status_code=404, detail="Machine not found")
     background_tasks.add_task(ws_manager.broadcast, "REFRESH_MACHINES")
     return updated_machine

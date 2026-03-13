@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 from datetime import datetime
 
@@ -21,9 +21,16 @@ class ShiftShort(BaseModel):
 # BASE SCHEMA
 # =======================
 class WeavingInspectionBase(BaseModel):
-    weaving_basket_ticket_id: int = Field(..., description="ID của phiếu rổ dệt cần kiểm tra")
+    # Flutter gửi "ticket_id", alias cho phép nhận cả hai tên
+    model_config = ConfigDict(populate_by_name=True)
+
+    weaving_basket_ticket_id: int = Field(
+        ...,
+        alias="ticket_id",
+        description="ID của phiếu rổ dệt cần kiểm tra (Flutter gửi là ticket_id)",
+    )
     stage_name: str = Field(..., min_length=1, max_length=50, description="Giai đoạn: Lần 1, Lần 2, Ra rổ...")
-    
+
     # Thông tin người kiểm tra
     employee_id: int
     shift_id: int
@@ -47,8 +54,10 @@ class WeavingInspectionCreate(WeavingInspectionBase):
 # UPDATE
 # =======================
 class WeavingInspectionUpdate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     # Cho phép sửa mọi trường
-    weaving_basket_ticket_id: Optional[int] = None
+    weaving_basket_ticket_id: Optional[int] = Field(default=None, alias="ticket_id")
     stage_name: Optional[str] = Field(None, min_length=1, max_length=50)
     employee_id: Optional[int] = None
     shift_id: Optional[int] = None

@@ -81,3 +81,4 @@ class WeavingBasketTicket(Base):
     
     # Relationship 1-N: Một phiếu có nhiều lô sợi thành phần
     yarns = relationship("WeavingTicketYarn", back_populates="ticket", cascade="all, delete-orphan")
+    weaving_productions = relationship("WeavingProduction", back_populates="weaving_ticket")

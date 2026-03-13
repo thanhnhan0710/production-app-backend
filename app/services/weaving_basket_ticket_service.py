@@ -73,29 +73,59 @@ def search_tickets(db: Session, code: Optional[str] = None, product_id: Optional
 # CREATE (Bắt đầu phiếu)
 # ============================
 
+def _generate_unique_code(db: Session, machine_id: int, machine_line: str) -> str:
+    """Sinh code phiếu dệt duy nhất: WV-{machine_id}-L{line}-{YYMMDDHHmmss}"""
+    import time
+    ts = datetime.now().strftime("%y%m%d%H%M%S")
+    candidate = f"WV-{machine_id}-L{machine_line}-{ts}"
+    while db.query(WeavingBasketTicket).filter(WeavingBasketTicket.code == candidate).first():
+        time.sleep(0.01)
+        ts = datetime.now().strftime("%y%m%d%H%M%S")
+        candidate = f"WV-{machine_id}-L{machine_line}-{ts}"
+    return candidate
+
+
 def create_ticket(db: Session, ticket_in: WeavingTicketCreate):
-    if get_ticket_by_code(db, ticket_in.code):
-        raise HTTPException(status_code=409, detail=f"Ticket code '{ticket_in.code}' already exists.")
+    # Tự động sinh code khi Flutter gửi "AUTO" (hoặc rỗng)
+    final_code = (ticket_in.code or "").strip()
+    if not final_code or final_code.upper() == "AUTO":
+        final_code = _generate_unique_code(
+            db,
+            machine_id=ticket_in.machine_id,
+            machine_line=str(ticket_in.machine_line or "0"),
+        )
+    elif get_ticket_by_code(db, final_code):
+        raise HTTPException(status_code=409, detail=f"Ticket code '{final_code}' already exists.")
 
     # 1. Tạo Header
-    ticket_data = ticket_in.model_dump(exclude={'yarns'})
+    ticket_data = ticket_in.model_dump(exclude={"yarns"})
+    ticket_data["code"] = final_code  # ghi đè code đã xử lý
     db_ticket = WeavingBasketTicket(**ticket_data)
-    
+
     if not db_ticket.time_in:
         db_ticket.time_in = datetime.now()
 
     db.add(db_ticket)
-    db.flush() # Lấy ID của ticket trước khi tạo yarns
+    db.flush()  # Lấy ID của ticket trước khi tạo yarns
 
-    # 2. Tạo chi tiết sợi
+    # 2. Tạo chi tiết sợi — loại bỏ yarn trùng (cùng batch_id + component_type)
     if ticket_in.yarns:
+        seen: set = set()
         for yarn_in in ticket_in.yarns:
+            dedup_key = (yarn_in.batch_id, yarn_in.component_type or "")
+            if dedup_key in seen:
+                logger.warning(
+                    f"Bỏ qua yarn trùng: batch_id={yarn_in.batch_id} "
+                    f"component_type='{yarn_in.component_type}' trong ticket {final_code}"
+                )
+                continue
+            seen.add(dedup_key)
             db_yarn = WeavingTicketYarn(
                 ticket_id=db_ticket.id,
                 batch_id=yarn_in.batch_id,
                 component_type=yarn_in.component_type,
                 quantity=yarn_in.quantity,
-                note=yarn_in.note
+                note=yarn_in.note,
             )
             db.add(db_yarn)
 
