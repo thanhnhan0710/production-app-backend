@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../frontend-owvds"
+		},
+		{
+			"path": "../../AppHeThong/production_app_frontend"
+		}
+	],
+	"settings": {}
+}
